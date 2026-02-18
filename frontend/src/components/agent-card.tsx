@@ -81,7 +81,7 @@ export function AgentCard({ agentId, status, nftId, lastOutput }: AgentCardProps
             <p className="mt-3 text-xs text-slate-300 line-clamp-2 font-mono">{lastOutput}</p>
           )}
           {nftId && (
-            <p className="mt-2 text-[10px] text-slate-500 font-mono truncate" title={nftId}>
+            <p className="mt-2 text-[11px] text-slate-500 font-mono whitespace-nowrap overflow-hidden text-ellipsis" title={nftId}>
               {nftId.includes('mock') ? 'Identity linked' : `iNFT: ${nftId.slice(0, 16)}...`}
             </p>
           )}

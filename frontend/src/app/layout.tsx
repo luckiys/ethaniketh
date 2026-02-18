@@ -27,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${syne.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen font-sans antialiased bg-[#0a0e17] text-white">
+      <body className="min-h-screen w-full font-sans antialiased bg-[#0a0e17] text-white overflow-x-hidden">
         <Providers>{children}</Providers>
       </body>
     </html>

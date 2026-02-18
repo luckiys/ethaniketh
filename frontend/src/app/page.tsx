@@ -195,8 +195,8 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-grid-pattern">
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="min-h-screen w-full bg-grid-pattern flex flex-col items-center">
+      <div className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Awaiting approval banner */}
         {status === 'awaiting_approval' && plan && (
           <div className="mb-6 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-6 py-4 flex items-center justify-between">
@@ -207,8 +207,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-10">
+        {/* Header - centered layout */}
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-8 w-full">
           <div>
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
               AegisOS
@@ -218,8 +218,8 @@ export default function Home() {
           <WalletConnect />
         </header>
 
-        {/* Main grid */}
-        <div className="grid gap-6 lg:grid-cols-2 mb-8">
+        {/* Main grid - centered, equal columns */}
+        <div className="grid gap-6 lg:grid-cols-2 mb-8 w-full">
           {/* Session card */}
           <section className="glass-card rounded-2xl p-6 shadow-glow">
             <h2 className="text-lg font-semibold mb-5 text-white flex items-center gap-2">
@@ -270,7 +270,7 @@ export default function Home() {
               <Shield className="h-5 w-5 text-cyan-400" />
               Agents
             </h2>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 w-full">
               <AgentCard
                 agentId="watcher"
                 status={agentStatus.watcher}
@@ -297,30 +297,30 @@ export default function Home() {
           </section>
         </div>
 
-        {/* Timeline */}
-        <section className="glass-card rounded-2xl p-6 shadow-glow mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
-            <Activity className="h-5 w-5 text-cyan-400" />
-            Live Timeline
-          </h2>
-          <div className="max-h-44 overflow-y-auto space-y-2 font-mono text-sm rounded-xl bg-white/[0.02] border border-white/5 p-4">
-            {events.length === 0 && (
-              <p className="text-slate-500 flex items-center gap-2">
-                <span className="text-slate-600">●</span> Events will appear here when you run a session...
-              </p>
-            )}
-            {events.map((e, i) => (
-              <div key={i} className="flex gap-4 text-slate-400 py-1">
-                <span className="text-cyan-400 font-medium shrink-0">{e.type}</span>
-                <span className="text-slate-500">{e.agentId}</span>
-                <span className="text-slate-600 ml-auto">{new Date(e.timestamp).toLocaleTimeString()}</span>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* Timeline + Proof - side by side on large screens */}
+        <div className="grid gap-6 lg:grid-cols-2 mb-8 w-full">
+          <section className="glass-card rounded-2xl p-6 shadow-glow w-full">
+            <h2 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
+              <Activity className="h-5 w-5 text-cyan-400 shrink-0" />
+              Live Timeline
+            </h2>
+            <div className="max-h-44 overflow-y-auto space-y-2 font-mono text-sm rounded-xl bg-white/[0.02] border border-white/5 p-4">
+              {events.length === 0 && (
+                <p className="text-slate-500 flex items-center gap-2">
+                  <span className="text-slate-600">●</span> Events will appear here when you run a session...
+                </p>
+              )}
+              {events.map((e, i) => (
+                <div key={i} className="flex gap-4 text-slate-400 py-1">
+                  <span className="text-cyan-400 font-medium shrink-0">{e.type}</span>
+                  <span className="text-slate-500">{e.agentId}</span>
+                  <span className="text-slate-600 ml-auto">{new Date(e.timestamp).toLocaleTimeString()}</span>
+                </div>
+              ))}
+            </div>
+          </section>
 
-        {/* Proof */}
-        <section className="glass-card rounded-2xl p-6 shadow-glow mb-8">
+          <section className="glass-card rounded-2xl p-6 shadow-glow w-full">
           <h2 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-cyan-400" />
             Proof
@@ -352,7 +352,8 @@ export default function Home() {
               </p>
             )}
           </div>
-        </section>
+          </section>
+        </div>
 
         {/* Error */}
         {error && (
