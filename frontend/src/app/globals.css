@@ -3,15 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --bg-base: #0a0e17;
-  --bg-card: #0f1624;
-  --bg-elevated: #141d2e;
-  --border: rgba(148, 163, 184, 0.12);
-  --accent-cyan: #22d3ee;
-  --accent-emerald: #34d399;
-  --text-primary: #f1f5f9;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --bg-base: #fafafa;
+  --bg-card: #ffffff;
+  --border: #e5e5e5;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
 }
 
 @layer base {
@@ -19,27 +16,12 @@
     border-color: var(--border);
   }
   body {
-    font-family: var(--font-display), system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-base);
     color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
   }
   .font-mono {
-    font-family: var(--font-mono), ui-monospace, monospace;
+    font-family: ui-monospace, 'SF Mono', Monaco, monospace;
   }
 }
-
-/* Subtle grid background */
-.bg-grid-pattern {
-  background-image:
-    linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
-  background-size: 48px 48px;
-}
-
-/* Glass card effect */
-.glass-card {
-  background: linear-gradient(135deg, rgba(15, 22, 36, 0.9) 0%, rgba(20, 29, 46, 0.7) 100%);
-  border: 1px solid rgba(148, 163, 184, 0.08);
-  backdrop-filter: blur(12px);
-}
-
