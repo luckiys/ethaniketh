@@ -36,56 +36,40 @@ export function AgentCard({ agentId, status, nftId, lastOutput }: AgentCardProps
   const { label, desc, icon: Icon, color } = CONFIG[agentId];
 
   const statusConfig = {
-    idle: {
-      dot: 'bg-slate-500/80',
-      text: 'text-slate-400',
-      border: 'border-slate-600/60',
-    },
-    running: {
-      dot: 'bg-cyan-400 animate-pulse',
-      text: 'text-cyan-400',
-      border: 'border-cyan-500/40',
-    },
-    done: {
-      dot: 'bg-emerald-400',
-      text: 'text-emerald-400',
-      border: 'border-emerald-500/30',
-    },
-    error: {
-      dot: 'bg-red-400',
-      text: 'text-red-400',
-      border: 'border-red-500/40',
-    },
+    idle: { dot: 'bg-slate-500/80', text: 'text-slate-400', border: 'border-slate-600/60' },
+    running: { dot: 'bg-cyan-400 animate-pulse', text: 'text-cyan-400', border: 'border-cyan-500/40' },
+    done: { dot: 'bg-emerald-400', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+    error: { dot: 'bg-red-400', text: 'text-red-400', border: 'border-red-500/40' },
   };
 
   const s = statusConfig[status];
 
   return (
     <div
-      className={`rounded-2xl border p-5 transition-all duration-300 bg-gradient-to-br ${color} ${s.border} hover:border-opacity-60`}
+      className={`min-w-[220px] rounded-2xl border p-5 transition-all duration-300 bg-gradient-to-br ${color} ${s.border} hover:border-opacity-60`}
     >
-      <div className="flex items-start gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/5">
-          <Icon className="h-6 w-6 text-slate-400" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h4 className="font-semibold text-white">{label}</h4>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 border border-white/5">
+            <Icon className="h-5 w-5 text-slate-400" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="font-semibold text-white truncate">{label}</h4>
             <span className={`inline-flex items-center gap-1.5 text-xs ${s.text}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-              {status}
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
+              <span>{status}</span>
             </span>
           </div>
-          <p className="mt-0.5 text-sm text-slate-400">{desc}</p>
-          {lastOutput && (
-            <p className="mt-3 text-xs text-slate-300 line-clamp-2 font-mono">{lastOutput}</p>
-          )}
-          {nftId && (
-            <p className="mt-2 text-[11px] text-slate-500 font-mono whitespace-nowrap overflow-hidden text-ellipsis" title={nftId}>
-              {nftId.includes('mock') ? 'Identity linked' : `iNFT: ${nftId.slice(0, 16)}...`}
-            </p>
-          )}
         </div>
+        <p className="text-sm text-slate-400 leading-relaxed">{desc}</p>
+        {lastOutput && (
+          <p className="text-xs text-slate-300 font-mono break-words line-clamp-2">{lastOutput}</p>
+        )}
+        {nftId && (
+          <p className="text-xs text-slate-500 font-mono">
+            {nftId.includes('mock') ? 'Identity linked' : `iNFT: ${nftId.slice(0, 16)}...`}
+          </p>
+        )}
       </div>
     </div>
   );
