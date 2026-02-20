@@ -48,6 +48,12 @@ Copy `.env.example` to `.env` in the backend folder and configure:
 - HTS transfer on execute (when configured)
 - 0g iNFT identities for agents (mock or real)
 
+## Vercel Deployment
+
+1. Import the repo and create a project.
+2. Set **Root Directory** to `frontend` (Project Settings → General).
+3. Install and build commands are configured in `frontend/vercel.json`.
+
 ## Tech Stack
 
 - **Frontend**: Next.js 14, wagmi, viem, Tailwind
