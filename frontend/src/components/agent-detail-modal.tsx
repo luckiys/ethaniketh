@@ -64,33 +64,33 @@ export function AgentDetailModal({ agentId, onClose }: AgentDetailModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} aria-hidden />
       <div
-        className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-xl"
+        className="relative w-full max-w-md rounded-lg border border-zinc-800 bg-zinc-950 p-6 shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="agent-detail-title"
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-full p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+          className="absolute right-4 top-4 rounded p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
           aria-label="Close"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
-        <div className="flex items-center gap-4 mb-6">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100">
-            <Icon className="h-7 w-7 text-neutral-600" />
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-zinc-800">
+            <Icon className="h-5 w-5 text-zinc-400" />
           </div>
-          <h2 id="agent-detail-title" className="text-2xl font-semibold text-neutral-900">
+          <h2 id="agent-detail-title" className="text-lg font-semibold text-zinc-100">
             {label}
           </h2>
         </div>
-        <p className="mb-6 text-neutral-600 leading-relaxed">{description}</p>
-        <ul className="space-y-3">
+        <p className="mb-4 text-sm text-zinc-400 leading-relaxed">{description}</p>
+        <ul className="space-y-2">
           {bullets.map((b, i) => (
-            <li key={i} className="flex gap-3 text-sm text-neutral-600">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
+            <li key={i} className="flex gap-2 text-sm text-zinc-400">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-zinc-500" />
               {b}
             </li>
           ))}

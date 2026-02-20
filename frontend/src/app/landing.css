@@ -42,16 +42,35 @@
   font-family: 'Dancing Script', cursive;
 }
 
+/* Signature line - draws across when scrolled into view */
+.signature-line {
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), transparent);
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.signature-visible .signature-line {
+  width: 200px;
+}
+
+/* Signature text - reveals like signing when scrolled into view */
 .signature-reveal {
   display: inline-block;
-  opacity: 1;
-  animation: signature-reveal 2s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  opacity: 0.4;
+  clip-path: inset(0 100% 0 0);
+  /* Fallback: reveal after 3s if scroll trigger doesn't fire */
+  animation: signature-reveal 1.8s cubic-bezier(0.22, 1, 0.36, 1) 3s forwards;
+}
+
+.signature-visible .signature-reveal {
+  animation: signature-reveal 1.8s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards;
 }
 
 @keyframes signature-reveal {
   0% {
     clip-path: inset(0 100% 0 0);
-    opacity: 0.3;
+    opacity: 0.4;
   }
   100% {
     clip-path: inset(0 0 0 0);

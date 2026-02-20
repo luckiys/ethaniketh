@@ -37,17 +37,17 @@ export function WalletConnect() {
 
   if (isConnected) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-100">
-          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span className="text-sm font-medium text-neutral-700 truncate max-w-[140px]" title={address}>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-800 bg-zinc-900/50">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span className="text-xs font-medium text-zinc-300 truncate max-w-[120px]" title={address}>
             {address?.slice(0, 6)}...{address?.slice(-4)}
           </span>
-          {chain && <span className="text-xs text-neutral-500 hidden sm:inline">{chain.name}</span>}
+          {chain && <span className="text-xs text-zinc-500 hidden sm:inline">{chain.name}</span>}
         </div>
         <button
           onClick={() => disconnect()}
-          className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 rounded-full hover:bg-neutral-100 transition-colors"
+          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
         >
           Disconnect
         </button>
@@ -56,24 +56,24 @@ export function WalletConnect() {
   }
 
   return (
-    <div ref={ref} className="relative flex flex-col items-end gap-2">
+    <div ref={ref} className="relative flex flex-col gap-2">
       <button
         onClick={() => setShowWallets(!showWallets)}
         disabled={isPending}
-        className="px-6 py-2.5 rounded-full bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="w-full px-4 py-2 rounded-md bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isPending ? 'Connecting...' : 'Connect Wallet'}
       </button>
 
       {showWallets && (
-        <div className="absolute top-full right-0 mt-2 w-64 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl z-50">
-          <p className="px-3 py-2 text-xs font-medium text-neutral-500">Choose a wallet</p>
+        <div className="absolute bottom-full left-0 right-0 mb-2 rounded-md border border-zinc-800 bg-zinc-900 p-2 shadow-xl z-50">
+          <p className="px-2 py-1.5 text-xs font-medium text-zinc-500">Choose a wallet</p>
           {connectors.map((connector) => (
             <button
               key={connector.uid}
               onClick={() => handleConnect(connector)}
               disabled={!connector.ready}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-medium text-neutral-900 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-2 rounded text-left text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {getWalletLabel(connector)}
             </button>
@@ -83,8 +83,8 @@ export function WalletConnect() {
 
       {error && (
         <div className="flex items-center gap-2">
-          <p className="text-xs text-red-600">{error.message}</p>
-          <button onClick={() => reset()} className="text-xs text-neutral-500 hover:text-neutral-700 underline">
+          <p className="text-xs text-red-400">{error.message}</p>
+          <button onClick={() => reset()} className="text-xs text-zinc-500 hover:text-zinc-300 underline">
             Dismiss
           </button>
         </div>

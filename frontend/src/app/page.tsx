@@ -43,7 +43,7 @@ export default function LandingPage() {
     const landing = document.querySelector('.landing');
     if (!landing) return;
 
-    const observer = new IntersectionObserver(
+    const animateObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
@@ -56,8 +56,23 @@ export default function LandingPage() {
       { threshold: 0, rootMargin: '-60px 0px -60px 0px', root: landing }
     );
 
-    document.querySelectorAll('[data-animate]').forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    const signatureObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('signature-visible');
+          }
+        });
+      },
+      { threshold: 0, root: null }
+    );
+
+    document.querySelectorAll('[data-animate]').forEach((el) => animateObserver.observe(el));
+    document.querySelectorAll('[data-signature]').forEach((el) => signatureObserver.observe(el));
+    return () => {
+      animateObserver.disconnect();
+      signatureObserver.disconnect();
+    };
   }, []);
 
   return (
@@ -160,10 +175,10 @@ export default function LandingPage() {
           <p className="text-white/75 text-center mt-10 text-base max-w-2xl mx-auto font-medium" data-animate>
             No gas spent until you approve. No execution without your explicit signature. Your keys, your rules.
           </p>
-          <div className="mt-14 flex justify-center" data-animate>
-            <div className="relative w-full max-w-md mx-auto p-8 rounded-2xl border-2 border-white/25 bg-white/10 backdrop-blur-sm">
+          <div className="mt-14 flex justify-center" data-signature>
+            <div className="relative w-full max-w-md mx-auto p-8 rounded-2xl border-2 border-white/25 bg-white/10 backdrop-blur-sm text-center">
               <p className="text-white/70 text-sm font-medium mb-6 uppercase tracking-widest">Approved by</p>
-              <div className="h-px bg-gradient-to-r from-transparent via-blue-500/40 to-transparent mb-6" />
+              <div className="signature-line mb-6 mx-auto" />
               <p className="signature-font signature-reveal text-4xl sm:text-5xl text-white/95 font-semibold">
                 John Doe
               </p>
@@ -252,11 +267,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="relative flex flex-col items-center py-16 sm:py-20 px-8 sm:px-12 lg:px-16 bg-black">
+      {/* Footer - full section like others */}
+      <footer id="footer" className="relative flex flex-col items-center justify-between py-16 sm:py-20 px-8 sm:px-12 lg:px-16 bg-black">
         <div className="section-divider absolute top-0 left-0 right-0" aria-hidden />
-        <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col justify-start pt-4">
-          <div className="text-center mb-12">
+        <div className="w-full max-w-6xl mx-auto flex-1 flex flex-col justify-center">
+          <div className="text-center">
             <h2 className="landing-heading text-3xl sm:text-4xl lg:text-5xl text-white mb-4" data-animate>
               Ready to take control?
             </h2>
@@ -271,14 +286,14 @@ export default function LandingPage() {
               Launch AegisOS
             </Link>
           </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:justify-between pt-8 border-t border-white/10">
-            <span className="text-white/60 text-sm font-medium text-center sm:text-left">© AegisOS. AI advises, humans decide, blockchain verifies.</span>
-            <div className="flex items-center gap-6">
-              <Link href="#features" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">Features</Link>
-              <Link href="#how-it-works" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">How it works</Link>
-              <Link href="#stats" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">Stats</Link>
-              <Link href="/app" className="text-blue-400 hover:text-blue-300 text-sm font-semibold transition-colors">Launch App</Link>
-            </div>
+        </div>
+        <div className="w-full max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-6 sm:justify-between pt-8 border-t border-white/10 shrink-0">
+          <span className="text-white/60 text-sm font-medium text-center sm:text-left">© AegisOS. AI advises, humans decide, blockchain verifies.</span>
+          <div className="flex items-center gap-6">
+            <Link href="#features" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">Features</Link>
+            <Link href="#how-it-works" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">How it works</Link>
+            <Link href="#stats" className="text-white/75 hover:text-blue-400 text-sm font-semibold transition-colors">Stats</Link>
+            <Link href="/app" className="text-blue-400 hover:text-blue-300 text-sm font-semibold transition-colors">Launch App</Link>
           </div>
         </div>
       </footer>

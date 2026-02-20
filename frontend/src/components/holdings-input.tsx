@@ -96,16 +96,16 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
   const canImport = walletAddress && balance && parseFloat(formatUnits(balance.value, balance.decimals)) > 0 && !disabled;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-neutral-600">Holdings</label>
+        <label className="text-sm font-medium text-zinc-400">Holdings</label>
         <div className="flex items-center gap-2">
           {canImport && (
             <button
               type="button"
               onClick={importFromWallet}
               disabled={importing}
-              className="flex items-center gap-1.5 text-sm text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
             >
               <Wallet className="h-4 w-4" />
               {importing ? 'Importing...' : 'Import from wallet'}
@@ -115,62 +115,62 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
             type="button"
             onClick={addRow}
             disabled={disabled}
-            className="flex items-center gap-1.5 text-sm text-neutral-600 hover:text-neutral-900 disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Add row
           </button>
         </div>
       </div>
-      <div className="rounded-xl border border-neutral-200 overflow-hidden bg-neutral-50/50">
+      <div className="rounded-md border border-zinc-800 overflow-hidden bg-zinc-950">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50/80">
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Symbol</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Amount</th>
-              <th className="text-left px-4 py-3 font-medium text-neutral-500">Value (USD)</th>
-              <th className="w-12 px-2 py-3" />
+            <tr className="border-b border-zinc-800 bg-zinc-900/50">
+              <th className="text-left px-3 py-2 font-medium text-zinc-500 text-xs">Symbol</th>
+              <th className="text-left px-3 py-2 font-medium text-zinc-500 text-xs">Amount</th>
+              <th className="text-left px-3 py-2 font-medium text-zinc-500 text-xs">Value (USD)</th>
+              <th className="w-10 px-2 py-2" />
             </tr>
           </thead>
           <tbody>
             {holdings.map((h, i) => (
-              <tr key={i} className="border-t border-neutral-100">
-                <td className="px-4 py-2">
+              <tr key={i} className="border-t border-zinc-800">
+                <td className="px-3 py-1.5">
                   <input
                     type="text"
                     value={h.symbol}
                     onChange={(e) => updateRow(i, 'symbol', e.target.value)}
                     placeholder="ETH"
                     disabled={disabled}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+                    className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-100 placeholder-zinc-500 text-xs outline-none focus:border-zinc-600"
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-3 py-1.5">
                   <input
                     type="number"
                     value={h.amount || ''}
                     onChange={(e) => updateRow(i, 'amount', e.target.value)}
                     placeholder="0"
                     disabled={disabled}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+                    className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-100 placeholder-zinc-500 text-xs outline-none focus:border-zinc-600"
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-3 py-1.5">
                   <input
                     type="number"
                     value={h.valueUsd ?? ''}
                     onChange={(e) => updateRow(i, 'valueUsd', e.target.value)}
                     placeholder="0"
                     disabled={disabled}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-900 placeholder-neutral-400 outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+                    className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-zinc-100 placeholder-zinc-500 text-xs outline-none focus:border-zinc-600"
                   />
                 </td>
-                <td className="px-2 py-2">
+                <td className="px-2 py-1.5">
                   <button
                     type="button"
                     onClick={() => removeRow(i)}
                     disabled={disabled}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    className="flex h-7 w-7 items-center justify-center rounded text-zinc-500 hover:text-red-400 hover:bg-red-950/30 disabled:opacity-50 transition-colors"
                   >
                     ×
                   </button>
@@ -181,7 +181,7 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
         </table>
       </div>
       {holdings.length === 0 && (
-        <p className="text-sm text-neutral-500">
+        <p className="text-xs text-zinc-500">
           {walletAddress ? 'Import from wallet or add a holding manually.' : 'Add at least one holding to start.'}
         </p>
       )}
