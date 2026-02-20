@@ -25,6 +25,21 @@ export const WatchSignalSchema = z.object({
   })),
   alerts: z.array(z.string()),
   timestamp: z.string(),
+  // Rich market data for dynamic risk scoring
+  marketData: z.object({
+    fearGreedIndex: z.number(),          // 0–100 from alternative.me
+    fearGreedLabel: z.string(),          // "Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"
+    avgVolatility24h: z.number(),        // portfolio-weighted avg |24h % change|
+    avgLiquidityRatio: z.number(),       // portfolio-weighted avg (24h volume / market cap)
+    avgAthDrawdown: z.number(),          // portfolio-weighted avg % below ATH (negative, e.g. -30)
+    perAsset: z.array(z.object({
+      symbol: z.string(),
+      change24h: z.number(),
+      marketCap: z.number(),
+      volume24h: z.number(),
+      athDrawdown: z.number(),
+    })),
+  }).optional(),
 });
 
 export const StrategyPlanSchema = z.object({
