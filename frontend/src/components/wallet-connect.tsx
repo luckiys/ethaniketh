@@ -4,14 +4,29 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
 
 const WALLET_LABELS: Record<string, string> = {
+  metamask: 'MetaMask',
+  phantom: 'Phantom',
   injected: 'Browser Wallet',
-  walletConnect: 'WalletConnect',
+  walletconnect: 'WalletConnect',
   'coinbase wallet': 'Coinbase Wallet',
+};
+
+const WALLET_ICONS: Record<string, string> = {
+  metamask: '🦊',
+  phantom: '👻',
+  walletconnect: '🔗',
+  'coinbase wallet': '💙',
+  injected: '🌐',
 };
 
 function getWalletLabel(connector: { name?: string; id?: string }): string {
   const key = (connector.name || connector.id || '').toLowerCase();
   return WALLET_LABELS[key] || connector.name || connector.id || 'Wallet';
+}
+
+function getWalletIcon(connector: { name?: string; id?: string }): string {
+  const key = (connector.name || connector.id || '').toLowerCase();
+  return WALLET_ICONS[key] ?? '🔑';
 }
 
 export function WalletConnect() {
@@ -98,6 +113,7 @@ export function WalletConnect() {
               disabled={isPending}
               className="w-full flex items-center gap-2 px-3 py-2.5 rounded-md text-left text-sm text-zinc-200 hover:bg-zinc-800 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
+              <span className="text-base leading-none">{getWalletIcon(connector)}</span>
               {getWalletLabel(connector)}
             </button>
           ))}

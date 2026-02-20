@@ -12,7 +12,22 @@ const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'b56e18d47
 const config = createConfig({
   chains: [base, mainnet, polygon, arbitrum, optimism],
   connectors: [
-    injected(),
+    // Generic injected: covers MetaMask, Frame, Rainbow, and any EIP-1193 extension
+    injected({ target: 'metaMask' }),
+    // Phantom EVM: only shows when Phantom is installed — reads window.phantom.ethereum
+    // which is Phantom's dedicated EVM provider (separate from window.ethereum)
+    injected({
+      target() {
+        return {
+          id: 'phantom',
+          name: 'Phantom',
+          provider:
+            typeof window !== 'undefined'
+              ? (window as unknown as { phantom?: { ethereum?: unknown } }).phantom?.ethereum
+              : undefined,
+        };
+      },
+    }),
     walletConnect({ projectId }),
     coinbaseWallet({ appName: 'AegisOS' }),
   ],
