@@ -25,6 +25,7 @@ export default function RunPage() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [plan, setPlan] = useState<StrategyPlan | null>(null);
   const [planHash, setPlanHash] = useState<string | null>(null);
+  const [stratBrainCid, setStratBrainCid] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'starting' | 'running' | 'awaiting_approval' | 'executed' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [agentDetail, setAgentDetail] = useState<AgentId | null>(null);
@@ -103,6 +104,7 @@ export default function RunPage() {
       if (!runRes.ok) throw new Error(runData.error || 'Failed to run');
       setPlan(runData.plan);
       setPlanHash(runData.planHash ?? null);
+      setStratBrainCid(runData.stratBrainCid ?? null);
       const sessionRes = await fetch(`/api/session/${data.sessionId}`);
       const sessionData = await sessionRes.json();
       setSessionState((s) => ({ ...s, ...sessionData }));
@@ -186,6 +188,7 @@ export default function RunPage() {
     setEvents([]);
     setPlan(null);
     setPlanHash(null);
+    setStratBrainCid(null);
     setStatus('idle');
     setError(null);
   };
@@ -300,13 +303,40 @@ export default function RunPage() {
 
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-6">
           <h2 className="text-base font-medium text-zinc-100 mb-2">Verification</h2>
-          <div className="space-y-3 text-xs font-mono rounded-md border border-zinc-800 bg-zinc-950 p-4">
-            {sessionState?.lastHcsTxId && <p className="text-zinc-300">HCS: {sessionState.lastHcsTxId}</p>}
-            {sessionState?.htsTxId && <p className="text-zinc-300">HTS: {sessionState.htsTxId}</p>}
-            {sessionState?.signature && (
-              <p className="text-zinc-300 break-all">Signed by {sessionState.signerAddress}</p>
+          <div className="space-y-2 text-xs font-mono rounded-md border border-zinc-800 bg-zinc-950 p-4">
+            {/* iNFT agent identities — show as soon as session starts */}
+            {sessionState?.agentNftIds && (
+              <div className="space-y-1 pb-2 border-b border-zinc-800">
+                <p className="text-zinc-500 font-sans">Agent iNFTs (Hedera HTS · 0g brain)</p>
+                {(['watcher', 'strategist', 'executor'] as const).map((a) => (
+                  <p key={a} className="text-zinc-400 truncate">
+                    <span className="text-zinc-600">{a}: </span>{sessionState.agentNftIds![a]}
+                  </p>
+                ))}
+              </div>
             )}
-            {!sessionState?.lastHcsTxId && !sessionState?.htsTxId && !sessionState?.signature && (
+            {/* Strategy brain archived to 0g after strategist runs */}
+            {stratBrainCid && (
+              <p className="text-emerald-400 break-all">
+                <span className="text-zinc-500">0g brain: </span>0g://{stratBrainCid}
+              </p>
+            )}
+            {sessionState?.lastHcsTxId && (
+              <p className="text-zinc-300 break-all">
+                <span className="text-zinc-500">HCS: </span>{sessionState.lastHcsTxId}
+              </p>
+            )}
+            {sessionState?.htsTxId && (
+              <p className="text-zinc-300 break-all">
+                <span className="text-zinc-500">HTS: </span>{sessionState.htsTxId}
+              </p>
+            )}
+            {sessionState?.signature && (
+              <p className="text-zinc-300 break-all">
+                <span className="text-zinc-500">Signed by: </span>{sessionState.signerAddress}
+              </p>
+            )}
+            {!sessionState && (
               <p className="text-zinc-500">Complete a run and approve a plan to see verification details.</p>
             )}
           </div>

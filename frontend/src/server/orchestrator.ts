@@ -4,7 +4,7 @@ import type { AgentEvent, WorkflowState } from '@aegisos/shared';
 import type { Holding, WatchSignal, StrategyPlan, SignedApproval } from '@aegisos/shared';
 import { WorkflowStateMachine } from './state-machine';
 import { publishToHcs, getOrCreateHcsTopic } from './hedera';
-import { mintAgentNfts } from './og-inft';
+import { mintAgentNfts, archiveStrategyBrain } from './og-inft';
 import { runWatcher } from './agents/watcher';
 import { runStrategist } from './agents/strategist';
 import { runExecutor } from './agents/executor';
@@ -111,6 +111,7 @@ export async function runWorkflow(sessionId: string): Promise<{
   signal?: WatchSignal;
   plan?: StrategyPlan;
   planHash?: string;
+  stratBrainCid?: string;
   error?: string;
 }> {
   const state = sessions.get(sessionId);
@@ -139,8 +140,19 @@ export async function runWorkflow(sessionId: string): Promise<{
   const plan = await runStrategist(signal, state.goal);
   state.currentPlan = plan;
 
+  // Archive the full strategy brain to 0g so the strategist's iNFT intelligence
+  // is verifiable on-chain. The CID is emitted in the PROPOSE event payload.
+  const stratBrainCid = await archiveStrategyBrain(sessionId, {
+    planId: plan.planId,
+    riskScore: plan.riskScore,
+    recommendation: plan.recommendation,
+    reasoning: plan.reasoning,
+    goalProfile: state.goal,
+    actions: plan.actions,
+  });
+
   const planHash = hashPayload(plan);
-  emit(createEvent('PROPOSE', sessionId, 'strategist', { ...plan, planHash }, state.agentNftIds.strategist, plan.planId));
+  emit(createEvent('PROPOSE', sessionId, 'strategist', { ...plan, planHash, stratBrainCid }, state.agentNftIds.strategist, plan.planId));
   await logToHcs(createEvent('PROPOSE', sessionId, 'strategist', { planId: plan.planId, planHash }, state.agentNftIds.strategist, plan.planId));
 
   sm.transition('AWAITING_APPROVAL');
@@ -154,7 +166,7 @@ export async function runWorkflow(sessionId: string): Promise<{
     expiresAt: plan.expiresAt,
   }, state.agentNftIds.strategist, plan.planId));
 
-  return { state: 'AWAITING_APPROVAL', signal, plan, planHash };
+  return { state: 'AWAITING_APPROVAL', signal, plan, planHash, stratBrainCid };
 }
 
 export async function approvePlan(sessionId: string, approval: SignedApproval): Promise<{ success: boolean; error?: string }> {
