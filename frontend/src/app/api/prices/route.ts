@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const revalidate = 30; // cache 30 s so rapid typing doesn't hammer the API
+
 // Same map as the watcher so symbol resolution is consistent
 const COINGECKO_IDS: Record<string, string> = {
   ETH: 'ethereum',
@@ -38,7 +40,7 @@ export async function GET(request: Request) {
   try {
     const res = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`,
-      { next: { revalidate: 30 } } // cache 30 s so rapid typing doesn't hammer the API
+      {}
     );
     const data = (await res.json()) as Record<string, { usd?: number }>;
 
