@@ -33,15 +33,15 @@ export default function AppDashboard() {
         <h2 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">How it works</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           {[
-            { icon: Eye, label: 'Watcher', desc: 'Monitors your portfolio and market conditions' },
-            { icon: Brain, label: 'Strategist', desc: 'Analyzes risk and proposes a plan' },
-            { icon: Zap, label: 'Executor', desc: 'Runs only after you sign' },
-          ].map(({ icon: Icon, label, desc }) => (
+            { icon: Eye,   label: 'Watcher',    desc: 'Monitors your portfolio and market conditions', color: 'text-blue-400' },
+            { icon: Brain, label: 'Strategist',  desc: 'Analyzes risk and proposes a plan',            color: 'text-violet-400' },
+            { icon: Zap,   label: 'Executor',    desc: 'Runs only after you sign',                     color: 'text-emerald-400' },
+          ].map(({ icon: Icon, label, desc, color }) => (
             <div
               key={label}
               className="p-4 rounded-lg border border-zinc-800 bg-zinc-900/30"
             >
-              <Icon className="h-5 w-5 text-zinc-500" />
+              <Icon className={`h-5 w-5 ${color}`} />
               <h3 className="mt-2 font-medium text-zinc-200 text-sm">{label}</h3>
               <p className="mt-1 text-xs text-zinc-500">{desc}</p>
             </div>

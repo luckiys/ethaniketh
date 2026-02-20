@@ -114,14 +114,15 @@
   50% { transform: translateY(4px); opacity: 0.7; }
 }
 
-/* Scroll-triggered slide up - content always visible, animates when in view */
+/* Scroll-triggered fade + slide up */
 [data-animate] {
-  opacity: 1;
-  transform: translateY(24px);
-  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-animate].animate-visible {
+  opacity: 1;
   transform: translateY(0);
 }
 

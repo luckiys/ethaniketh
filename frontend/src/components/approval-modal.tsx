@@ -77,8 +77,8 @@ export function ApprovalModal({
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-zinc-800">
-            <ShieldCheck className="h-4 w-4 text-zinc-400" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-500/10 border border-emerald-500/20">
+            <ShieldCheck className="h-5 w-5 text-emerald-400" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-zinc-100">Approve Strategy</h2>
@@ -168,9 +168,9 @@ export function ApprovalModal({
           <button
             onClick={handleApprove}
             disabled={disabled || status === 'signing'}
-            className="flex-1 py-3 rounded-md bg-zinc-100 text-zinc-900 text-sm font-medium hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 py-3 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {status === 'signing' ? 'Approving...' : isWalletConnected ? 'Sign & Approve' : 'Approve (Demo)'}
+            {status === 'signing' ? 'Signing...' : isWalletConnected ? 'Sign & Approve' : 'Approve (Demo)'}
           </button>
           <button
             onClick={onReject}

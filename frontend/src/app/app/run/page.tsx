@@ -198,7 +198,27 @@ export default function RunPage() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-zinc-100">Run</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-zinc-100">Run</h1>
+        {(status === 'starting' || status === 'running') && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Running
+          </span>
+        )}
+        {status === 'awaiting_approval' && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-medium text-blue-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+            Awaiting approval
+          </span>
+        )}
+        {status === 'executed' && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Executed
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-zinc-500 text-sm">
         Describe your goal and let the agents propose a strategy. You approve every step.
       </p>
