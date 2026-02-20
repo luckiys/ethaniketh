@@ -8,7 +8,6 @@ import { mintAgentNfts } from './og-inft';
 import { runWatcher } from './agents/watcher';
 import { runStrategist } from './agents/strategist';
 import { runExecutor } from './agents/executor';
-
 export type EventCallback = (event: AgentEvent) => void;
 
 let eventCallback: EventCallback | null = null;
@@ -175,7 +174,7 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
   state.signature = approval.signature;
   state.signerAddress = approval.signerAddress;
 
-  emit(createEvent('APPROVED', sessionId, 'executor', {
+  await emit(createEvent('APPROVED', sessionId, 'executor', {
     planId: state.currentPlan.planId,
     signerAddress: approval.signerAddress,
   }, state.agentNftIds.executor, state.currentPlan.planId));

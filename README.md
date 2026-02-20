@@ -52,7 +52,7 @@ Copy `.env.example` to `.env` in the backend folder and configure:
 
 1. Import the repo and create a project.
 2. Set **Root Directory** to `frontend` (Project Settings → General).
-3. Install and build commands are configured in `frontend/vercel.json`.
+3. Install and build commands are in `frontend/vercel.json`.
 
 ## Tech Stack
 
