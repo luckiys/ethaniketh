@@ -1,6 +1,19 @@
 const OPERATOR_ID = process.env.HEDERA_OPERATOR_ID || '';
+// Key may be a raw ECDSA hex (0x...) or a DER-encoded string (302e... / 3030...)
 const OPERATOR_KEY = process.env.HEDERA_OPERATOR_KEY || '';
 const MOCK_MODE = !OPERATOR_ID || !OPERATOR_KEY;
+
+/** Parse the operator private key — handles both raw ECDSA hex and DER strings. */
+async function loadPrivateKey() {
+  const { PrivateKey } = await import('@hashgraph/sdk');
+  const raw = OPERATOR_KEY.replace(/^0x/, '');
+  // Raw 32-byte hex → ECDSA secp256k1
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return PrivateKey.fromStringECDSA(raw);
+  }
+  // DER-encoded or any other format the SDK understands
+  return PrivateKey.fromString(OPERATOR_KEY);
+}
 
 let topicId: string | null = process.env.HEDERA_TOPIC_ID || null;
 
@@ -19,11 +32,10 @@ export async function getOrCreateHcsTopic(): Promise<string> {
     const {
       Client,
       TopicCreateTransaction,
-      PrivateKey,
       AccountId,
     } = await import('@hashgraph/sdk');
 
-    const operatorKey = PrivateKey.fromString(OPERATOR_KEY);
+    const operatorKey = await loadPrivateKey();
     const client = Client.forTestnet()
       .setOperator(AccountId.fromString(OPERATOR_ID), operatorKey);
 
@@ -51,11 +63,10 @@ export async function publishToHcs(message: string): Promise<string> {
     const {
       Client,
       TopicMessageSubmitTransaction,
-      PrivateKey,
       AccountId,
     } = await import('@hashgraph/sdk');
 
-    const operatorKey = PrivateKey.fromString(OPERATOR_KEY);
+    const operatorKey = await loadPrivateKey();
     const client = Client.forTestnet()
       .setOperator(AccountId.fromString(OPERATOR_ID), operatorKey);
 
@@ -91,12 +102,11 @@ export async function executeHtsTransfer(
     const {
       Client,
       TransferTransaction,
-      PrivateKey,
       AccountId,
       TokenId,
     } = await import('@hashgraph/sdk');
 
-    const operatorKey = PrivateKey.fromString(OPERATOR_KEY);
+    const operatorKey = await loadPrivateKey();
     const client = Client.forTestnet()
       .setOperator(AccountId.fromString(OPERATOR_ID), operatorKey);
 
