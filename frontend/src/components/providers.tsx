@@ -21,9 +21,10 @@ const config = createConfig({
         return {
           id: 'phantom',
           name: 'Phantom',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           provider:
             typeof window !== 'undefined'
-              ? (window as unknown as { phantom?: { ethereum?: unknown } }).phantom?.ethereum
+              ? (window as any).phantom?.ethereum
               : undefined,
         };
       },

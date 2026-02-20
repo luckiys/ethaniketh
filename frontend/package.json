@@ -18,12 +18,12 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "ethers": "^6.13.1",
-    "lucide-react": "^0.454.0",
-    "next": "14.2.15",
+    "lucide-react": "^0.575.0",
+    "next": "^14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
-    "viem": "^2.21.0",
+    "viem": "^2.45.3",
     "wagmi": "^2.12.0"
   },
   "devDependencies": {
