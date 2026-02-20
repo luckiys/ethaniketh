@@ -121,9 +121,15 @@ export function WalletConnect() {
       )}
 
       {error && (
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-red-400">{error.message}</p>
-          <button onClick={() => reset()} className="text-xs text-zinc-500 hover:text-zinc-300 underline">
+        <div className="flex items-start gap-2">
+          <p className="text-xs text-red-400 leading-relaxed flex-1">
+            {error.message.toLowerCase().includes('reject')
+              ? 'Connection rejected.'
+              : error.message.length > 80
+              ? error.message.slice(0, 80) + '…'
+              : error.message}
+          </p>
+          <button onClick={() => reset()} className="text-xs text-zinc-500 hover:text-zinc-300 underline shrink-0">
             Dismiss
           </button>
         </div>
