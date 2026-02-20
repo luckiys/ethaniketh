@@ -42,11 +42,23 @@ export async function runStrategist(signal: WatchSignal, goal: string): Promise<
   if ((recommendation === 'REBALANCE' || recommendation === 'REDUCE_RISK') && topPositions.length > 0 && maxWeight > 40) {
     const top = topPositions[0];
     if (top) {
+      // Calculate tokens to move to bring the top position down to target weight
+      const targetWeight = recommendation === 'REDUCE_RISK' ? 35 : 40;
+      const excessUsd = Math.max(0, ((maxWeight - targetWeight) / 100) * portfolioValue);
+      const pricePerToken = top.amount && top.amount > 0 ? top.valueUsd / top.amount : 0;
+      let reduceAmount: string;
+      if (pricePerToken > 0) {
+        reduceAmount = (excessUsd / pricePerToken).toFixed(4);
+      } else if (top.amount && top.amount > 0) {
+        reduceAmount = (top.amount * 0.2).toFixed(4);
+      } else {
+        reduceAmount = '10';
+      }
       actions.push({
         type: 'TRANSFER',
         from: 'portfolio',
         to: 'stable',
-        amount: '10',
+        amount: reduceAmount,
         token: top.symbol,
       });
     }

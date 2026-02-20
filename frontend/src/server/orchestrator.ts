@@ -170,6 +170,36 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
     return { success: false, error: 'Plan expired' };
   }
 
+  // Verify EIP-712 signature for real wallet signatures
+  const isDemo = approval.signature.startsWith('0xDemoSignature-') ||
+    approval.signerAddress === '0x0000000000000000000000000000000000000000';
+  if (!isDemo && approval.signatureTimestamp) {
+    try {
+      const { verifyTypedData } = await import('viem');
+      const isValid = await verifyTypedData({
+        address: approval.signerAddress as `0x${string}`,
+        domain: { name: 'AegisOS', version: '1', chainId: BigInt(8453) },
+        types: {
+          Approval: [
+            { name: 'planId', type: 'string' },
+            { name: 'planHash', type: 'string' },
+            { name: 'timestamp', type: 'uint256' },
+          ],
+        },
+        primaryType: 'Approval',
+        message: {
+          planId: approval.planId,
+          planHash: approval.planHash,
+          timestamp: BigInt(approval.signatureTimestamp),
+        },
+        signature: approval.signature as `0x${string}`,
+      });
+      if (!isValid) return { success: false, error: 'Invalid signature — signer address does not match' };
+    } catch (e) {
+      return { success: false, error: `Signature verification failed: ${String(e)}` };
+    }
+  }
+
   state.approvedPlanHash = planHash;
   state.signature = approval.signature;
   state.signerAddress = approval.signerAddress;

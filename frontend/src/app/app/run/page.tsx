@@ -114,9 +114,10 @@ export default function RunPage() {
   }, [goal, holdings, address]);
 
   const handleApprove = useCallback(
-    async (signature: string, signerAddress: string) => {
+    async (signature: string, signerAddress: string, signatureTimestamp?: string) => {
       if (!sessionId || !plan || !planHash) return;
       const hashToStore = planHash;
+      const planSnapshot = plan;
       setPlan(null);
       setPlanHash(null);
       try {
@@ -124,26 +125,41 @@ export default function RunPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            approval: { planId: plan.planId, planHash, signature, signerAddress, timestamp: new Date().toISOString() },
+            approval: { planId: planSnapshot.planId, planHash, signature, signerAddress, timestamp: new Date().toISOString(), signatureTimestamp },
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error || 'Approval failed');
         const sessionRes = await fetch(`/api/session/${sessionId}`);
         const sessionData = await sessionRes.json();
-        setSessionState((s) => ({
-          ...s,
+        const newState = {
           htsTxId: sessionData.htsTxId,
           lastHcsTxId: sessionData.lastHcsTxId,
           signature,
           signerAddress,
           approvedPlanHash: hashToStore,
-        }));
+        };
+        setSessionState((s) => ({ ...s, ...newState }));
         setStatus('executed');
+        // Save completed session to localStorage for verification page
+        try {
+          const record = {
+            id: sessionId,
+            timestamp: new Date().toISOString(),
+            goal,
+            recommendation: planSnapshot.recommendation,
+            riskScore: planSnapshot.riskScore,
+            hcsTxId: sessionData.lastHcsTxId,
+            htsTxId: sessionData.htsTxId,
+            signerAddress,
+          };
+          const prev = JSON.parse(localStorage.getItem('aegisos-verifications') ?? '[]');
+          localStorage.setItem('aegisos-verifications', JSON.stringify([record, ...prev].slice(0, 20)));
+        } catch {}
       } catch (e) {
         setError(String(e));
       }
     },
-    [sessionId, plan, planHash]
+    [sessionId, plan, planHash, goal]
   );
 
   const handleReject = useCallback(async () => {

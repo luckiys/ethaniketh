@@ -7,10 +7,10 @@ import type { StrategyPlan } from '@aegisos/shared';
 interface ApprovalModalProps {
   plan: StrategyPlan;
   planHash: string;
-  onApprove: (signature: string, signerAddress: string) => void;
+  onApprove: (signature: string, signerAddress: string, signatureTimestamp?: string) => void;
   onReject: () => void;
   disabled?: boolean;
-  signPlan: (planHash: string) => Promise<{ signature: string; address: string }>;
+  signPlan: (planHash: string) => Promise<{ signature: string; address: string; signatureTimestamp?: string }>;
   isWalletConnected?: boolean;
 }
 
@@ -31,8 +31,8 @@ export function ApprovalModal({
     setError(null);
     try {
       if (isWalletConnected) {
-        const { signature, address } = await signPlan(planHash);
-        onApprove(signature, address);
+        const { signature, address, signatureTimestamp } = await signPlan(planHash);
+        onApprove(signature, address, signatureTimestamp);
       } else {
         onApprove('0xDemoSignature-' + Date.now(), '0x0000000000000000000000000000000000000000');
       }

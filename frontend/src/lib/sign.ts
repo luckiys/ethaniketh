@@ -19,7 +19,7 @@ export async function signApproval(
   address: `0x${string}`,
   planId: string,
   planHash: string
-): Promise<{ signature: string; address: string }> {
+): Promise<{ signature: string; address: string; signatureTimestamp: string }> {
   const timestamp = BigInt(Math.floor(Date.now() / 1000));
   const signature = await walletClient.signTypedData({
     account: address,
@@ -28,5 +28,5 @@ export async function signApproval(
     primaryType: 'Approval',
     message: { planId, planHash, timestamp },
   });
-  return { signature, address };
+  return { signature, address, signatureTimestamp: timestamp.toString() };
 }

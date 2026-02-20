@@ -21,6 +21,7 @@ export const WatchSignalSchema = z.object({
     symbol: z.string(),
     weight: z.number(),
     valueUsd: z.number(),
+    amount: z.number().optional(),
   })),
   alerts: z.array(z.string()),
   timestamp: z.string(),
@@ -57,6 +58,7 @@ export const SignedApprovalSchema = z.object({
   signature: z.string(),
   signerAddress: z.string(),
   timestamp: z.string(),
+  signatureTimestamp: z.string().optional(), // seconds as string, used for EIP-712 verification
 });
 
 export const SessionStartSchema = z.object({
