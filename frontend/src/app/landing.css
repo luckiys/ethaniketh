@@ -132,23 +132,4 @@
 [data-stagger] > [data-animate]:nth-child(4) { transition-delay: 240ms; }
 [data-stagger] > [data-animate]:nth-child(5) { transition-delay: 320ms; }
 
-/* CTA button - jumpy, glowly, outlined */
-.cta-glow-bounce {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.7), 0 0 24px rgba(59, 130, 246, 0.6), 0 0 48px rgba(59, 130, 246, 0.3);
-  animation: cta-bounce 1.2s ease-in-out infinite;
-}
-
-/* CTA needs its own transform - don't let data-animate override */
-.cta-glow-bounce.animate-visible {
-  transform: translateY(0);
-}
-
-.cta-glow-bounce:hover {
-  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.9), 0 0 32px rgba(59, 130, 246, 0.7), 0 0 64px rgba(59, 130, 246, 0.4);
-}
-
-@keyframes cta-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
 

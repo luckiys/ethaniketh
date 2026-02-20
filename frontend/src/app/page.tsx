@@ -43,20 +43,13 @@ export default function LandingPage() {
     const landing = document.querySelector('.landing');
     if (!landing) return;
 
-    // Hero content: show immediately on load
-    const heroSection = document.querySelector('.hero-section');
-    if (heroSection) {
-      heroSection.querySelectorAll('[data-animate]').forEach((el) => el.classList.add('animate-visible'));
-    }
-
     const animateObserver = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             entry.target.classList.add('animate-visible');
           } else {
-            const hero = entry.target.closest('.hero-section');
-            if (!hero) entry.target.classList.remove('animate-visible');
+            entry.target.classList.remove('animate-visible');
           }
         });
       },
@@ -87,7 +80,7 @@ export default function LandingPage() {
       <LandingNav />
 
       {/* Hero */}
-      <section className="hero-section relative flex flex-col items-center justify-center min-h-screen bg-black gradient-mesh px-8 sm:px-12 lg:px-16">
+      <section className="relative flex flex-col items-center justify-center bg-black gradient-mesh px-8 sm:px-12 lg:px-16">
         <div className="w-full max-w-6xl mx-auto text-center" data-stagger>
           <h1 className="landing-heading text-6xl sm:text-7xl md:text-8xl lg:text-9xl text-white tracking-tight mb-8 leading-[1.05]" data-animate>
             AI advises.
@@ -101,10 +94,10 @@ export default function LandingPage() {
           </p>
           <Link
             href="/app"
-            className="cta-glow-bounce inline-block px-10 py-5 rounded-lg bg-blue-600 text-white font-semibold text-lg hover:bg-blue-500 transition-colors"
+            className="inline-block px-10 py-5 rounded-lg bg-blue-600 text-white font-semibold text-lg hover:bg-blue-500 transition-colors"
             data-animate
           >
-            Try Our Product
+            Launch AegisOS
           </Link>
         </div>
         <div className="absolute bottom-6 left-0 right-0 flex justify-center">

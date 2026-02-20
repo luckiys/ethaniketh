@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Play, ShieldCheck } from 'lucide-react';
 import { WalletConnect } from './wallet-connect';
+import { WalletErrorBoundary } from './wallet-error-boundary';
 
 const NAV_ITEMS = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
@@ -15,7 +16,7 @@ export function AppNav() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-56 border-r border-zinc-800 bg-zinc-950 flex flex-col">
+    <aside className="fixed left-0 top-0 bottom-0 w-56 border-r border-zinc-800 bg-zinc-950 flex flex-col overflow-visible">
       <div className="p-6 border-b border-zinc-800">
         <Link href="/app" className="block">
           <span className="text-lg font-semibold text-zinc-100">AegisOS</span>
@@ -41,8 +42,10 @@ export function AppNav() {
           );
         })}
       </nav>
-      <div className="p-4 border-t border-zinc-800">
-        <WalletConnect />
+      <div className="p-4 border-t border-zinc-800 overflow-visible">
+        <WalletErrorBoundary>
+          <WalletConnect />
+        </WalletErrorBoundary>
       </div>
     </aside>
   );
