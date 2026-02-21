@@ -103,6 +103,7 @@ const config = createConfig({
   ],
   connectors: buildConnectors(),
   transports: buildTransports(),
+  ssr: true,
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
