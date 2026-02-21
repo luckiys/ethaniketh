@@ -8,6 +8,7 @@ const StartSessionSchema = z.object({
   goal: GoalInputSchema.shape.goal,
   holdings: HoldingsInputSchema.shape.holdings,
   walletAddress: z.string().optional(),
+  riskPreference: z.number().min(0).max(100).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -17,8 +18,8 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.message }, { status: 400 });
     }
-    const { goal, holdings, walletAddress } = parsed.data;
-    const state = await startSession(goal, holdings, walletAddress);
+    const { goal, holdings, walletAddress, riskPreference } = parsed.data;
+    const state = await startSession(goal, holdings, walletAddress, riskPreference);
     return NextResponse.json(state);
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

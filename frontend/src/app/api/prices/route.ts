@@ -1,54 +1,37 @@
 import { NextResponse } from 'next/server';
 
-export const revalidate = 30; // cache 30 s so rapid typing doesn't hammer the API
+export const revalidate = 30; // cache 30s so rapid typing doesn't hammer the API
 
-// Same map as the watcher so symbol resolution is consistent
-const COINGECKO_IDS: Record<string, string> = {
-  ETH: 'ethereum',
-  BTC: 'bitcoin',
-  WBTC: 'wrapped-bitcoin',
-  USDC: 'usd-coin',
-  USDT: 'tether',
-  DAI: 'dai',
-  SOL: 'solana',
-  AVAX: 'avalanche-2',
-  MATIC: 'matic-network',
-  POL: 'matic-network',
-  LINK: 'chainlink',
-  UNI: 'uniswap',
-  AAVE: 'aave',
-  BNB: 'binancecoin',
-  ARB: 'arbitrum',
-  OP: 'optimism',
-  CRV: 'curve-dao-token',
-  MKR: 'maker',
-  SNX: 'synthetix-network-token',
-  COMP: 'compound-governance-token',
-};
+const FREECRYPTO_API_KEY = process.env.FREECRYPTO_API_KEY || 'o0b5nopkw468adq2ro5y';
+const FREECRYPTO_BASE = 'https://api.freecryptoapi.com/v1';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbolsParam = searchParams.get('symbols') ?? 'ETH';
   const symbols = [...new Set(symbolsParam.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))];
 
-  const ids = symbols.map((s) => COINGECKO_IDS[s]).filter((id): id is string => Boolean(id));
-
-  if (ids.length === 0) {
+  if (symbols.length === 0) {
     return NextResponse.json({ prices: {} });
   }
 
   try {
+    const symbolStr = symbols.join(',');
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=usd`,
-      {}
+      `${FREECRYPTO_BASE}/getData?symbol=${symbolStr}&apikey=${FREECRYPTO_API_KEY}`,
+      { headers: { Authorization: `Bearer ${FREECRYPTO_API_KEY}` } }
     );
-    const data = (await res.json()) as Record<string, { usd?: number }>;
+
+    if (!res.ok) throw new Error(`FreeCryptoAPI error: ${res.status}`);
+
+    const data = await res.json();
+
+    // API returns a single object for one symbol, array for multiple
+    const items: Array<{ symbol?: string; price?: number }> = Array.isArray(data) ? data : [data];
 
     const prices: Record<string, number> = {};
-    for (const symbol of symbols) {
-      const id = COINGECKO_IDS[symbol];
-      if (id && data[id]?.usd != null) {
-        prices[symbol] = data[id].usd!;
+    for (const item of items) {
+      if (item?.symbol && item?.price != null) {
+        prices[item.symbol.toUpperCase()] = item.price;
       }
     }
 

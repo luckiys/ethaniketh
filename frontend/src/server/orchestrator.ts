@@ -66,6 +66,7 @@ export interface SessionState {
   holdings: Holding[];
   agentNftIds: { watcher: string; strategist: string; executor: string };
   hederaTopicId: string;
+  riskPreference?: number;
   currentPlan?: StrategyPlan;
   approvedPlanHash?: string;
   signature?: string;
@@ -81,7 +82,7 @@ const g = globalThis as typeof globalThis & { __aegis_sessions?: Map<string, Ses
 if (!g.__aegis_sessions) g.__aegis_sessions = new Map();
 const sessions = g.__aegis_sessions;
 
-export async function startSession(goal: string, holdings: Holding[], walletAddress?: string): Promise<SessionState> {
+export async function startSession(goal: string, holdings: Holding[], walletAddress?: string, riskPreference?: number): Promise<SessionState> {
   const sessionId = randomUUID();
   const topicId = await getOrCreateHcsTopic();
   const agentNftIds = await mintAgentNfts(sessionId);
@@ -92,6 +93,7 @@ export async function startSession(goal: string, holdings: Holding[], walletAddr
     holdings,
     agentNftIds,
     hederaTopicId: topicId,
+    riskPreference,
   };
   sessions.set(sessionId, state);
 
@@ -142,7 +144,7 @@ export async function runWorkflow(sessionId: string): Promise<{
 
   sm.transition('PROPOSED');
 
-  const plan = await runStrategist(signal, state.goal);
+  const plan = await runStrategist(signal, state.goal, state.riskPreference);
   state.currentPlan = plan;
 
   // Archive the full strategy brain to 0g so the strategist's iNFT intelligence

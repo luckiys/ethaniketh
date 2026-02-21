@@ -231,7 +231,7 @@ function drawdownScore(avgAthDrawdown: number): number {
 // Main strategist
 // ---------------------------------------------------------------------------
 
-export async function runStrategist(signal: WatchSignal, goal: string): Promise<StrategyPlan> {
+export async function runStrategist(signal: WatchSignal, goal: string, riskPreference?: number): Promise<StrategyPlan> {
   const planId = randomUUID();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
@@ -265,6 +265,23 @@ export async function runStrategist(signal: WatchSignal, goal: string): Promise<
       D * profile.wDrawdown
     )
   );
+
+  // If user supplied an explicit risk preference (0–100), override the profile thresholds to match.
+  // Low ≤35 → tighten; Medium 36–72 → keep profile; High ≥73 → loosen.
+  if (riskPreference !== undefined) {
+    if (riskPreference <= 35) {
+      profile.reduceRiskAt = Math.max(30, riskPreference);
+      profile.rebalanceAt = Math.max(15, Math.round(riskPreference * 0.6));
+    } else if (riskPreference >= 73) {
+      profile.reduceRiskAt = Math.min(100, riskPreference + 5);
+      profile.rebalanceAt = Math.min(90, Math.round(riskPreference * 0.8));
+    } else {
+      // medium band — scale linearly between defaults
+      const t = (riskPreference - 36) / (72 - 36);
+      profile.reduceRiskAt = Math.round(55 + t * (82 - 55));
+      profile.rebalanceAt = Math.round(35 + t * (65 - 35));
+    }
+  }
 
   // --- Recommendation — thresholds depend on goal profile ---
   let recommendation: StrategyPlan['recommendation'] = 'HOLD';

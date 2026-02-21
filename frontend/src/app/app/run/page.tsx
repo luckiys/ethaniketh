@@ -2,16 +2,21 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useWalletClient, useSwitchChain } from 'wagmi';
+import { ShieldCheck } from 'lucide-react';
 import { HoldingsInput } from '@/components/holdings-input';
 import { AgentCard } from '@/components/agent-card';
 import { AgentDetailModal } from '@/components/agent-detail-modal';
 import { ApprovalModal } from '@/components/approval-modal';
+import { RiskSettingsModal, riskLabel, riskColor } from '@/components/risk-settings-modal';
+import type { RiskSetting } from '@/components/risk-settings-modal';
 import type { Holding, AgentEvent, StrategyPlan, AgentId } from '@aegisos/shared';
 import { signApproval } from '@/lib/sign';
 
 export default function RunPage() {
   const [goal, setGoal] = useState('Maximize yield while keeping risk low');
   const [holdings, setHoldings] = useState<Holding[]>([{ symbol: 'ETH', amount: 1, valueUsd: 2500 }]);
+  const [riskSetting, setRiskSetting] = useState<RiskSetting>({ mode: 'medium', value: 54 });
+  const [showRiskModal, setShowRiskModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<{
     hederaTopicId?: string;
@@ -72,10 +77,7 @@ export default function RunPage() {
 
   const startSession = useCallback(async () => {
     const trimmed = goal.trim();
-    if (!trimmed) {
-      setError('Describe your goal in plain words.');
-      return;
-    }
+    if (!trimmed) { setError('Describe your goal in plain words.'); return; }
     setStatus('starting');
     setError(null);
     setEvents([]);
@@ -91,7 +93,7 @@ export default function RunPage() {
       const res = await fetch('/api/session/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ goal: trimmed, holdings: validHoldings, walletAddress: address }),
+        body: JSON.stringify({ goal: trimmed, holdings: validHoldings, walletAddress: address, riskPreference: riskSetting.value }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to start');
@@ -113,7 +115,7 @@ export default function RunPage() {
       setError(String(e));
       setStatus('error');
     }
-  }, [goal, holdings, address]);
+  }, [goal, holdings, address, riskSetting]);
 
   const handleApprove = useCallback(
     async (signature: string, signerAddress: string, signatureTimestamp?: string) => {
@@ -126,40 +128,19 @@ export default function RunPage() {
         const res = await fetch(`/api/session/${sessionId}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            approval: { planId: planSnapshot.planId, planHash, signature, signerAddress, timestamp: new Date().toISOString(), signatureTimestamp },
-          }),
+          body: JSON.stringify({ approval: { planId: planSnapshot.planId, planHash, signature, signerAddress, timestamp: new Date().toISOString(), signatureTimestamp } }),
         });
         if (!res.ok) throw new Error((await res.json()).error || 'Approval failed');
         const sessionRes = await fetch(`/api/session/${sessionId}`);
         const sessionData = await sessionRes.json();
-        const newState = {
-          htsTxId: sessionData.htsTxId,
-          lastHcsTxId: sessionData.lastHcsTxId,
-          signature,
-          signerAddress,
-          approvedPlanHash: hashToStore,
-        };
-        setSessionState((s) => ({ ...s, ...newState }));
+        setSessionState((s) => ({ ...s, htsTxId: sessionData.htsTxId, lastHcsTxId: sessionData.lastHcsTxId, signature, signerAddress, approvedPlanHash: hashToStore }));
         setStatus('executed');
-        // Save completed session to localStorage for verification page
         try {
-          const record = {
-            id: sessionId,
-            timestamp: new Date().toISOString(),
-            goal,
-            recommendation: planSnapshot.recommendation,
-            riskScore: planSnapshot.riskScore,
-            hcsTxId: sessionData.lastHcsTxId,
-            htsTxId: sessionData.htsTxId,
-            signerAddress,
-          };
+          const record = { id: sessionId, timestamp: new Date().toISOString(), goal, recommendation: planSnapshot.recommendation, riskScore: planSnapshot.riskScore, hcsTxId: sessionData.lastHcsTxId, htsTxId: sessionData.htsTxId, signerAddress };
           const prev = JSON.parse(localStorage.getItem('aegisos-verifications') ?? '[]');
           localStorage.setItem('aegisos-verifications', JSON.stringify([record, ...prev].slice(0, 20)));
         } catch {}
-      } catch (e) {
-        setError(String(e));
-      }
+      } catch (e) { setError(String(e)); }
     },
     [sessionId, plan, planHash, goal]
   );
@@ -167,30 +148,19 @@ export default function RunPage() {
   const handleReject = useCallback(async () => {
     if (!sessionId) return;
     await fetch(`/api/session/${sessionId}/reject`, { method: 'POST' });
-    setPlan(null);
-    setPlanHash(null);
-    setStatus('idle');
+    setPlan(null); setPlanHash(null); setStatus('idle');
   }, [sessionId]);
 
-  const signPlan = useCallback(
-    async (hash: string) => {
-      if (!walletClient || !address) throw new Error('Connect wallet to sign');
-      const BASE_CHAIN_ID = 8453;
-      if (chain?.id !== BASE_CHAIN_ID && switchChainAsync) await switchChainAsync({ chainId: BASE_CHAIN_ID });
-      return signApproval(walletClient, address, plan!.planId, hash);
-    },
-    [walletClient, address, plan, chain?.id, switchChainAsync]
-  );
+  const signPlan = useCallback(async (hash: string) => {
+    if (!walletClient || !address) throw new Error('Connect wallet to sign');
+    const BASE_CHAIN_ID = 8453;
+    if (chain?.id !== BASE_CHAIN_ID && switchChainAsync) await switchChainAsync({ chainId: BASE_CHAIN_ID });
+    return signApproval(walletClient, address, plan!.planId, hash);
+  }, [walletClient, address, plan, chain?.id, switchChainAsync]);
 
   const resetSession = () => {
-    setSessionId(null);
-    setSessionState(null);
-    setEvents([]);
-    setPlan(null);
-    setPlanHash(null);
-    setStratBrainCid(null);
-    setStatus('idle');
-    setError(null);
+    setSessionId(null); setSessionState(null); setEvents([]); setPlan(null);
+    setPlanHash(null); setStratBrainCid(null); setStatus('idle'); setError(null);
   };
 
   const hasValidGoal = goal.trim().length > 0;
@@ -202,26 +172,21 @@ export default function RunPage() {
         <h1 className="text-2xl font-semibold text-zinc-100">Run</h1>
         {(status === 'starting' || status === 'running') && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-            Running
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />Running
           </span>
         )}
         {status === 'awaiting_approval' && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-medium text-blue-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-            Awaiting approval
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />Awaiting approval
           </span>
         )}
         {status === 'executed' && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Executed
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Executed
           </span>
         )}
       </div>
-      <p className="mt-1 text-zinc-500 text-sm">
-        Describe your goal and let the agents propose a strategy. You approve every step.
-      </p>
+      <p className="mt-1 text-zinc-500 text-sm">Describe your goal and let the agents propose a strategy. You approve every step.</p>
 
       {status === 'awaiting_approval' && plan && (
         <div className="mt-6 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center gap-3">
@@ -245,6 +210,24 @@ export default function RunPage() {
               />
             </div>
             <HoldingsInput holdings={holdings} onChange={setHoldings} disabled={!!sessionId} walletAddress={address} />
+
+            {/* Risk setting display bar */}
+            <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className={`h-4 w-4 ${riskColor(riskSetting.mode)}`} />
+                <span className="text-xs text-zinc-500">Risk tolerance</span>
+                <span className={`text-xs font-semibold ${riskColor(riskSetting.mode)}`}>{riskLabel(riskSetting)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRiskModal(true)}
+                disabled={!!sessionId}
+                className="text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors underline underline-offset-2"
+              >
+                Change
+              </button>
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button
                 onClick={startSession}
@@ -253,11 +236,23 @@ export default function RunPage() {
               >
                 {status === 'starting' ? 'Running...' : 'Start & Run'}
               </button>
+              {/* Risk button */}
+              <button
+                type="button"
+                onClick={() => setShowRiskModal(true)}
+                disabled={!!sessionId}
+                className={`flex items-center gap-2 px-4 py-3 rounded-md border text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  riskSetting.mode === 'low' ? 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
+                  : riskSetting.mode === 'high' ? 'border-red-500/40 text-red-400 hover:bg-red-500/10'
+                  : riskSetting.mode === 'custom' ? 'border-violet-500/40 text-violet-400 hover:bg-violet-500/10'
+                  : 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Risk
+              </button>
               {sessionId && status !== 'starting' && (
-                <button
-                  onClick={resetSession}
-                  className="px-4 py-3 rounded-md border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 text-sm font-medium transition-colors"
-                >
+                <button onClick={resetSession} className="px-4 py-3 rounded-md border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 text-sm font-medium transition-colors">
                   New Session
                 </button>
               )}
@@ -274,31 +269,15 @@ export default function RunPage() {
           <h2 className="text-base font-medium text-zinc-100 mb-1">Agents</h2>
           <p className="text-sm text-zinc-500 mb-4">Click an agent to learn what it does.</p>
           <div className="flex flex-col sm:flex-row gap-3 sm:flex-wrap">
-            <AgentCard
-              agentId="watcher"
-              status={agentStatus.watcher}
-              nftId={sessionState?.agentNftIds?.watcher}
-              lastOutput={(() => {
-                const last = events.filter((e) => e.agentId === 'watcher').slice(-1)[0];
-                const val = last?.payload?.portfolioValue;
-                return val != null ? `Portfolio: $${Number(val).toLocaleString()}` : undefined;
-              })()}
-              onClick={() => setAgentDetail('watcher')}
-            />
-            <AgentCard
-              agentId="strategist"
-              status={agentStatus.strategist}
-              nftId={sessionState?.agentNftIds?.strategist}
+            <AgentCard agentId="watcher" status={agentStatus.watcher} nftId={sessionState?.agentNftIds?.watcher}
+              lastOutput={(() => { const last = events.filter((e) => e.agentId === 'watcher').slice(-1)[0]; const val = last?.payload?.portfolioValue; return val != null ? `Portfolio: $${Number(val).toLocaleString()}` : undefined; })()}
+              onClick={() => setAgentDetail('watcher')} />
+            <AgentCard agentId="strategist" status={agentStatus.strategist} nftId={sessionState?.agentNftIds?.strategist}
               lastOutput={plan ? `${plan.recommendation} (risk: ${plan.riskScore})` : undefined}
-              onClick={() => setAgentDetail('strategist')}
-            />
-            <AgentCard
-              agentId="executor"
-              status={agentStatus.executor}
-              nftId={sessionState?.agentNftIds?.executor}
+              onClick={() => setAgentDetail('strategist')} />
+            <AgentCard agentId="executor" status={agentStatus.executor} nftId={sessionState?.agentNftIds?.executor}
               lastOutput={sessionState?.htsTxId ? `Tx: ${sessionState.htsTxId.slice(0, 20)}...` : undefined}
-              onClick={() => setAgentDetail('executor')}
-            />
+              onClick={() => setAgentDetail('executor')} />
           </div>
         </section>
       </div>
@@ -324,62 +303,35 @@ export default function RunPage() {
         <section className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-6">
           <h2 className="text-base font-medium text-zinc-100 mb-2">Verification</h2>
           <div className="space-y-2 text-xs font-mono rounded-md border border-zinc-800 bg-zinc-950 p-4">
-            {/* iNFT agent identities — show as soon as session starts */}
             {sessionState?.agentNftIds && (
               <div className="space-y-1 pb-2 border-b border-zinc-800">
                 <p className="text-zinc-500 font-sans">Agent iNFTs (Hedera HTS · 0g brain)</p>
                 {(['watcher', 'strategist', 'executor'] as const).map((a) => (
-                  <p key={a} className="text-zinc-400 truncate">
-                    <span className="text-zinc-600">{a}: </span>{sessionState.agentNftIds![a]}
-                  </p>
+                  <p key={a} className="text-zinc-400 truncate"><span className="text-zinc-600">{a}: </span>{sessionState.agentNftIds![a]}</p>
                 ))}
               </div>
             )}
-            {/* Strategy brain archived to 0g after strategist runs */}
-            {stratBrainCid && (
-              <p className="text-emerald-400 break-all">
-                <span className="text-zinc-500">0g brain: </span>0g://{stratBrainCid}
-              </p>
-            )}
-            {sessionState?.lastHcsTxId && (
-              <p className="text-zinc-300 break-all">
-                <span className="text-zinc-500">HCS: </span>{sessionState.lastHcsTxId}
-              </p>
-            )}
-            {sessionState?.htsTxId && (
-              <p className="text-zinc-300 break-all">
-                <span className="text-zinc-500">HTS: </span>{sessionState.htsTxId}
-              </p>
-            )}
-            {sessionState?.signature && (
-              <p className="text-zinc-300 break-all">
-                <span className="text-zinc-500">Signed by: </span>{sessionState.signerAddress}
-              </p>
-            )}
-            {!sessionState && (
-              <p className="text-zinc-500">Complete a run and approve a plan to see verification details.</p>
-            )}
+            {stratBrainCid && <p className="text-emerald-400 break-all"><span className="text-zinc-500">0g brain: </span>0g://{stratBrainCid}</p>}
+            {sessionState?.lastHcsTxId && <p className="text-zinc-300 break-all"><span className="text-zinc-500">HCS: </span>{sessionState.lastHcsTxId}</p>}
+            {sessionState?.htsTxId && <p className="text-zinc-300 break-all"><span className="text-zinc-500">HTS: </span>{sessionState.htsTxId}</p>}
+            {sessionState?.signature && <p className="text-zinc-300 break-all"><span className="text-zinc-500">Signed by: </span>{sessionState.signerAddress}</p>}
+            {!sessionState && <p className="text-zinc-500">Complete a run and approve a plan to see verification details.</p>}
           </div>
         </section>
       </div>
 
       {error && (
-        <div className="mt-6 p-4 rounded-lg border border-red-900/50 bg-red-950/20 text-sm text-red-300">
-          {error}
-        </div>
+        <div className="mt-6 p-4 rounded-lg border border-red-900/50 bg-red-950/20 text-sm text-red-300">{error}</div>
       )}
 
       {plan && planHash && (
-        <ApprovalModal
-          plan={plan}
-          planHash={planHash}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          signPlan={signPlan}
-          isWalletConnected={!!(walletClient && address)}
-        />
+        <ApprovalModal plan={plan} planHash={planHash} onApprove={handleApprove} onReject={handleReject} signPlan={signPlan} isWalletConnected={!!(walletClient && address)} />
       )}
       <AgentDetailModal agentId={agentDetail} onClose={() => setAgentDetail(null)} />
+
+      {showRiskModal && (
+        <RiskSettingsModal current={riskSetting} onSave={(s) => setRiskSetting(s)} onClose={() => setShowRiskModal(false)} />
+      )}
     </div>
   );
 }
