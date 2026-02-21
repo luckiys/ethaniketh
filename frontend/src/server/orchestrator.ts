@@ -11,6 +11,9 @@ import { storeExecutedPlanToZeroG } from './zerog';
 import { runWatcher } from './agents/watcher';
 import { runStrategist } from './agents/strategist';
 import { runExecutor } from './agents/executor';
+import { updateAgentReputation, recordPrediction, settlePredictions } from './agent-economy';
+import { createSdkReceipt } from './sdk-audit';
+import { recordScheduleCreated } from './schedule-tracker';
 export type EventCallback = (event: AgentEvent) => void;
 
 let eventCallback: EventCallback | null = null;
@@ -208,6 +211,22 @@ export async function runWorkflow(sessionId: string): Promise<{
     expiresAt: plan.expiresAt,
   }, state.agentNftIds.strategist, plan.planId));
 
+  // — Hedera SDK-Only: create HCS receipt for strategy proposal —
+  createSdkReceipt({
+    type: 'APPROVAL',
+    sessionId,
+    planId: plan.planId,
+  }).catch(() => {});
+
+  // — Hedera Killer App: watcher records prediction about outcome —
+  const predictionText = plan.riskScore > 60
+    ? 'reduce risk'
+    : plan.riskScore > 40
+    ? 'hold position'
+    : 'increase exposure';
+  recordPrediction(sessionId, 'watcher', predictionText, 10)
+    .catch(() => {});
+
   return { state: 'AWAITING_APPROVAL', signal, plan, planHash, stratBrainCid, alternatePlans: state.alternatePlans ?? [] };
 }
 
@@ -287,6 +306,36 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
   state.lastHcsTxId = hcsTx;
   syncToFile();
 
+  // — Hedera Killer App: update agent reputation after successful run —
+  const planId = state.currentPlan.planId;
+  const riskScore = state.currentPlan.riskScore ?? 50;
+  Promise.all([
+    updateAgentReputation('watcher', sessionId, true, riskScore),
+    updateAgentReputation('strategist', sessionId, true, riskScore),
+    updateAgentReputation('executor', sessionId, true, 0),
+  ]).catch((e) => console.error('[orchestrator] reputation update failed:', e));
+
+  // Settle watcher prediction market
+  const actualOutcome = steps.join(' ');
+  settlePredictions(sessionId, actualOutcome)
+    .catch((e) => console.error('[orchestrator] prediction settlement failed:', e));
+
+  // — Hedera SDK-Only: create HCS receipt + award AegisPoints (no Solidity) —
+  createSdkReceipt({
+    type: 'EXECUTION',
+    sessionId,
+    planId,
+    signerAddress: state.signerAddress,
+    loyaltyPoints: 100,
+  }).catch((e) => console.error('[orchestrator] sdk-receipt failed:', e));
+
+  // Track schedule if executor created one
+  const scheduledStep = steps.find((s) => s.startsWith('SCHEDULED via AegisScheduler:'));
+  if (scheduledStep) {
+    const txHash = scheduledStep.split(': ')[1] ?? '';
+    recordScheduleCreated(planHash, txHash);
+  }
+
   return { success: true };
 }
 
@@ -297,6 +346,20 @@ export async function rejectPlan(sessionId: string): Promise<{ success: boolean 
 
   emit(createEvent('REJECTED', sessionId, 'strategist', { planId: state.currentPlan?.planId }, state.agentNftIds.strategist, state.currentPlan?.planId));
   await logToHcs(createEvent('REJECTED', sessionId, 'strategist', {}, state.agentNftIds.strategist, state.currentPlan?.planId));
+
+  // — Hedera Killer App: update agent reputation after rejection —
+  updateAgentReputation('strategist', sessionId, false, state.currentPlan?.riskScore ?? 50)
+    .catch(() => {});
+
+  // — Hedera SDK-Only: create HCS rejection receipt —
+  if (state.currentPlan) {
+    createSdkReceipt({
+      type: 'REJECTION',
+      sessionId,
+      planId: state.currentPlan.planId,
+      signerAddress: state.signerAddress,
+    }).catch(() => {});
+  }
 
   state.currentPlan = undefined;
   syncToFile();

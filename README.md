@@ -195,14 +195,26 @@ npx hardhat verify --network hederaTestnet <AEGIS_SCHEDULER_ADDRESS>
 
 ---
 
-## ETHDenver 2026 Bounty targets
+## ETHDenver 2026 Bounty targets (5 bounties, all free)
 
-| Bounty | Prize | AegisOS implementation |
-|---|---|---|
-| [Hedera Killer App (OpenClaw)](https://ethdenver2026.devfolio.co/prizes) | $10k | 3-agent pipeline, HCS audit trail, human-in-the-loop approval |
-| [Hedera Schedule Service](https://ethdenver2026.devfolio.co/prizes) | $5k | `AegisScheduler.sol` → Schedule Service precompile (`0x...022b`) |
-| [0g DeFAI](https://ethdenver2026.devfolio.co/prizes) | $7k | 0g Storage for agent brains, strategy archive, executed plan audit trail |
-| [0g iNFT](https://ethdenver2026.devfolio.co/prizes) | $7k | `zerog.ts` uploads to 0g, `hedera-nft.ts` mints HTS NFT with `0g://` metadata URI |
+| # | Bounty | Prize | Key files | Free? |
+|---|--------|-------|-----------|-------|
+| 1 | **Hedera Killer App (OpenClaw)** | $10k | `agent-economy.ts`, `agent-reputation/`, `agent-market/` | ✅ Hedera Testnet |
+| 2 | **Hedera Schedule Service** | $5k | `AegisScheduler.sol`, `schedule-tracker.ts`, `schedule-status/` | ✅ Hedera Testnet |
+| 3 | **0G Labs: DeFAI Application** | $7k | `defi-sim.ts`, `defi-sim/`, `zerog.ts`, `strategist.ts` | ✅ 0G faucet |
+| 4 | **0G Labs: On-Chain Agent (iNFT)** | $7k | `og-inft.ts`, `zerog.ts`, `hedera-nft.ts`, `agent-profile/` | ✅ 0G faucet |
+| 5 | **Hedera: No Solidity Allowed** | $5k | `sdk-audit.ts`, `sdk-receipt/` (zero Solidity) | ✅ Hedera Testnet |
+
+**Total potential prize: $36,000 · All free to run · See `/bounties/BOUNTY_MAP.md` for full details**
+
+### Run the bounty demo
+```bash
+# Start server
+cd frontend && npm run dev
+
+# Run full demo against local server
+bash scripts/demo.sh
+```
 
 ---
 
