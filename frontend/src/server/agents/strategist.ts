@@ -2,6 +2,7 @@ import type { WatchSignal, StrategyPlan } from '@aegisos/shared';
 import { StrategyPlanSchema } from '@aegisos/shared';
 import { randomUUID } from 'crypto';
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 type GoalProfile = {
   label: 'conservative' | 'balanced' | 'aggressive' | 'yield';
@@ -15,7 +16,7 @@ type GoalProfile = {
   goalSummary: string;
 };
 
-async function generateLLMReasoning(
+function buildReasoningPrompt(
   goal: string,
   profile: GoalProfile,
   riskScore: number,
@@ -26,13 +27,8 @@ async function generateLLMReasoning(
   topPositions: Array<{ symbol: string; weight: number; valueUsd: number }>,
   marketData: WatchSignal['marketData'],
   portfolioValue: number,
-): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null as unknown as string; // fallback handled by caller
-
-  const client = new Anthropic({ apiKey });
-
-  const prompt = `You are a DeFi portfolio risk analyst. Write a clear, concise 2-3 sentence reasoning paragraph explaining a strategy recommendation to a crypto investor.
+): string {
+  return `You are a DeFi portfolio risk analyst. Write a clear, concise 2-3 sentence reasoning paragraph explaining a strategy recommendation to a crypto investor.
 
 Portfolio context:
 - Goal: ${goal}
@@ -55,15 +51,50 @@ Recommendation: ${recommendation}
 ${alerts.length > 0 ? `Key alerts: ${alerts.join('; ')}` : ''}
 
 Write a plain English explanation of why this recommendation makes sense given the data. Be specific about the numbers but explain them in plain language a non-expert can understand. No bullet points, no headers — just flowing prose.`;
+}
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
-    messages: [{ role: 'user', content: prompt }],
-  });
+async function generateLLMReasoning(
+  goal: string,
+  profile: GoalProfile,
+  riskScore: number,
+  recommendation: string,
+  C: number, V: number, S: number, L: number, D: number,
+  marketRegime: string,
+  alerts: string[],
+  topPositions: Array<{ symbol: string; weight: number; valueUsd: number }>,
+  marketData: WatchSignal['marketData'],
+  portfolioValue: number,
+): Promise<string | null> {
+  const prompt = buildReasoningPrompt(
+    goal, profile, riskScore, recommendation,
+    C, V, S, L, D,
+    marketRegime, alerts, topPositions, marketData, portfolioValue,
+  );
 
-  const content = message.content[0];
-  return content.type === 'text' ? content.text.trim() : (null as unknown as string);
+  // Try Gemini first (free tier, no credit card required)
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    if (text) return text;
+  }
+
+  // Fall back to Anthropic Claude if key is present
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (anthropicKey) {
+    const client = new Anthropic({ apiKey: anthropicKey });
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const content = message.content[0];
+    return content.type === 'text' ? content.text.trim() : null;
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
