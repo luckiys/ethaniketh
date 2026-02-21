@@ -1,0 +1,94 @@
+import { z } from 'zod';
+
+export const HoldingSchema = z.object({
+  symbol: z.string(),
+  amount: z.number().min(0),
+  valueUsd: z.number().optional(),
+});
+
+export const HoldingsInputSchema = z.object({
+  holdings: z.array(HoldingSchema),
+});
+
+export const GoalInputSchema = z.object({
+  goal: z.string().min(1, 'Goal is required'),
+});
+
+export const WatchSignalSchema = z.object({
+  portfolioValue: z.number(),
+  marketRegime: z.enum(['bull', 'bear', 'sideways', 'volatile']),
+  topPositions: z.array(z.object({
+    symbol: z.string(),
+    weight: z.number(),
+    valueUsd: z.number(),
+    amount: z.number().optional(),
+  })),
+  alerts: z.array(z.string()),
+  timestamp: z.string(),
+  // Rich market data for dynamic risk scoring
+  marketData: z.object({
+    fearGreedIndex: z.number(),          // 0–100 from alternative.me
+    fearGreedLabel: z.string(),          // "Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"
+    avgVolatility24h: z.number(),        // portfolio-weighted avg |24h % change|
+    avgLiquidityRatio: z.number(),       // portfolio-weighted avg (24h volume / market cap)
+    avgAthDrawdown: z.number(),          // portfolio-weighted avg % below ATH (negative, e.g. -30)
+    perAsset: z.array(z.object({
+      symbol: z.string(),
+      change24h: z.number(),
+      marketCap: z.number(),
+      volume24h: z.number(),
+      athDrawdown: z.number(),
+    })),
+  }).optional(),
+});
+
+export const StrategyPlanSchema = z.object({
+  planId: z.string(),
+  recommendation: z.enum(['REBALANCE', 'HOLD', 'REDUCE_RISK', 'INCREASE_EXPOSURE']),
+  riskScore: z.number().min(0).max(100),
+  worstCaseAnalysis: z.string(),
+  actions: z.array(z.object({
+    type: z.enum(['SWAP', 'TRANSFER', 'STAKE', 'UNSTAKE']),
+    from: z.string(),
+    to: z.string(),
+    amount: z.string(),
+    token: z.string(),
+  })),
+  reasoning: z.string(),
+  expiresAt: z.string(),
+});
+
+export const ApprovalRequestSchema = z.object({
+  planId: z.string(),
+  planHash: z.string(),
+  riskScore: z.number(),
+  worstCaseAnalysis: z.string(),
+  actions: z.array(z.unknown()),
+  expiresAt: z.string(),
+});
+
+export const SignedApprovalSchema = z.object({
+  planId: z.string(),
+  planHash: z.string(),
+  signature: z.string(),
+  signerAddress: z.string(),
+  timestamp: z.string(),
+  signatureTimestamp: z.string().optional(), // seconds as string, used for EIP-712 verification
+});
+
+export const SessionStartSchema = z.object({
+  sessionId: z.string(),
+  hederaTopicId: z.string(),
+  agentNftIds: z.object({
+    watcher: z.string(),
+    strategist: z.string(),
+    executor: z.string(),
+  }),
+  walletAddress: z.string().optional(),
+});
+
+export type Holding = z.infer<typeof HoldingSchema>;
+export type WatchSignal = z.infer<typeof WatchSignalSchema>;
+export type StrategyPlan = z.infer<typeof StrategyPlanSchema>;
+export type SignedApproval = z.infer<typeof SignedApprovalSchema>;
+export type SessionStart = z.infer<typeof SessionStartSchema>;
