@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export const revalidate = 30; // cache 30s so rapid typing doesn't hammer the API
+export const dynamic = 'force-dynamic';
 
 const FREECRYPTO_API_KEY = process.env.FREECRYPTO_API_KEY || 'o0b5nopkw468adq2ro5y';
 const FREECRYPTO_BASE = 'https://api.freecryptoapi.com/v1';
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     const symbolStr = symbols.join(',');
     const res = await fetch(
       `${FREECRYPTO_BASE}/getData?symbol=${symbolStr}&apikey=${FREECRYPTO_API_KEY}`,
-      { headers: { Authorization: `Bearer ${FREECRYPTO_API_KEY}` } }
+      { headers: { Authorization: `Bearer ${FREECRYPTO_API_KEY}` }, cache: 'no-store' }
     );
 
     if (!res.ok) throw new Error(`FreeCryptoAPI error: ${res.status}`);

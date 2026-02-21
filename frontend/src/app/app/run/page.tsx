@@ -14,7 +14,7 @@ import { signApproval } from '@/lib/sign';
 
 export default function RunPage() {
   const [goal, setGoal] = useState('Maximize yield while keeping risk low');
-  const [holdings, setHoldings] = useState<Holding[]>([{ symbol: 'ETH', amount: 1, valueUsd: 2500 }]);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [riskSetting, setRiskSetting] = useState<RiskSetting>({ mode: 'medium', value: 54 });
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);

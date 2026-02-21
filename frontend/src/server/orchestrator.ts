@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { createHash } from 'crypto';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import type { AgentEvent, WorkflowState } from '@aegisos/shared';
 import type { Holding, WatchSignal, StrategyPlan, SignedApproval } from '@aegisos/shared';
 import { WorkflowStateMachine } from './state-machine';
@@ -82,6 +84,28 @@ const g = globalThis as typeof globalThis & { __aegis_sessions?: Map<string, Ses
 if (!g.__aegis_sessions) g.__aegis_sessions = new Map();
 const sessions = g.__aegis_sessions;
 
+// File-based persistence so sessions survive hot reloads and process restarts
+const SESSION_FILE = join('/tmp', 'aegisos-sessions.json');
+
+function syncFromFile(): void {
+  try {
+    if (!existsSync(SESSION_FILE)) return;
+    const raw = readFileSync(SESSION_FILE, 'utf-8');
+    const data = JSON.parse(raw) as Record<string, SessionState>;
+    for (const [id, state] of Object.entries(data)) {
+      if (!sessions.has(id)) sessions.set(id, state);
+    }
+  } catch {}
+}
+
+function syncToFile(): void {
+  try {
+    const data: Record<string, SessionState> = {};
+    sessions.forEach((v, k) => { data[k] = v; });
+    writeFileSync(SESSION_FILE, JSON.stringify(data));
+  } catch {}
+}
+
 export async function startSession(goal: string, holdings: Holding[], walletAddress?: string, riskPreference?: number): Promise<SessionState> {
   const sessionId = randomUUID();
   const topicId = await getOrCreateHcsTopic();
@@ -96,6 +120,7 @@ export async function startSession(goal: string, holdings: Holding[], walletAddr
     riskPreference,
   };
   sessions.set(sessionId, state);
+  syncToFile();
 
   emit({
     type: 'WATCH',
@@ -110,6 +135,7 @@ export async function startSession(goal: string, holdings: Holding[], walletAddr
 }
 
 export function getSession(sessionId: string): SessionState | undefined {
+  if (!sessions.has(sessionId)) syncFromFile();
   return sessions.get(sessionId);
 }
 
@@ -121,6 +147,7 @@ export async function runWorkflow(sessionId: string): Promise<{
   stratBrainCid?: string;
   error?: string;
 }> {
+  if (!sessions.has(sessionId)) syncFromFile();
   const state = sessions.get(sessionId);
   if (!state) return { state: 'IDLE', error: 'Session not found' };
 
@@ -146,6 +173,7 @@ export async function runWorkflow(sessionId: string): Promise<{
 
   const plan = await runStrategist(signal, state.goal, state.riskPreference);
   state.currentPlan = plan;
+  syncToFile();
 
   // Archive the full strategy brain to 0g so the strategist's iNFT intelligence
   // is verifiable on-chain. The CID is emitted in the PROPOSE event payload.
@@ -177,6 +205,7 @@ export async function runWorkflow(sessionId: string): Promise<{
 }
 
 export async function approvePlan(sessionId: string, approval: SignedApproval): Promise<{ success: boolean; error?: string }> {
+  if (!sessions.has(sessionId)) syncFromFile();
   const state = sessions.get(sessionId);
   if (!state) return { success: false, error: 'Session not found' };
   if (!state.currentPlan) return { success: false, error: 'No plan to approve' };
@@ -233,16 +262,19 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
 
   const { htsTxId, steps } = await runExecutor(state.currentPlan, planHash, approval.signature);
   state.htsTxId = htsTxId;
+  syncToFile();
 
   const execPayload = { htsTxId, steps };
   emit(createEvent('EXECUTED', sessionId, 'executor', execPayload, state.agentNftIds.executor, state.currentPlan.planId));
   const hcsTx = await logToHcs(createEvent('EXECUTED', sessionId, 'executor', execPayload, state.agentNftIds.executor, state.currentPlan.planId));
   state.lastHcsTxId = hcsTx;
+  syncToFile();
 
   return { success: true };
 }
 
 export async function rejectPlan(sessionId: string): Promise<{ success: boolean }> {
+  if (!sessions.has(sessionId)) syncFromFile();
   const state = sessions.get(sessionId);
   if (!state) return { success: false };
 
@@ -250,5 +282,6 @@ export async function rejectPlan(sessionId: string): Promise<{ success: boolean 
   await logToHcs(createEvent('REJECTED', sessionId, 'strategist', {}, state.agentNftIds.strategist, state.currentPlan?.planId));
 
   state.currentPlan = undefined;
+  syncToFile();
   return { success: true };
 }
