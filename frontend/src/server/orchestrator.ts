@@ -74,7 +74,12 @@ export interface SessionState {
   lastHcsTxId?: string;
 }
 
-const sessions = new Map<string, SessionState>();
+// Next.js 15 isolates each API route's module scope, so a plain Map would be
+// re-created per route handler and sessions would disappear between requests.
+// Pinning the Map to globalThis gives all handlers a single shared instance.
+const g = globalThis as typeof globalThis & { __aegis_sessions?: Map<string, SessionState> };
+if (!g.__aegis_sessions) g.__aegis_sessions = new Map();
+const sessions = g.__aegis_sessions;
 
 export async function startSession(goal: string, holdings: Holding[], walletAddress?: string): Promise<SessionState> {
   const sessionId = randomUUID();
