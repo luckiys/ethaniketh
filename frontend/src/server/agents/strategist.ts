@@ -1,25 +1,74 @@
 import type { WatchSignal, StrategyPlan } from '@aegisos/shared';
 import { StrategyPlanSchema } from '@aegisos/shared';
 import { randomUUID } from 'crypto';
-
-// ---------------------------------------------------------------------------
-// Goal profile — parsed from free-text goal, controls risk weights + thresholds
-// ---------------------------------------------------------------------------
+import Anthropic from '@anthropic-ai/sdk';
 
 type GoalProfile = {
   label: 'conservative' | 'balanced' | 'aggressive' | 'yield';
-  // Risk component weights (must sum to 1.0)
   wConcentration: number;
   wVolatility: number;
   wSentiment: number;
   wLiquidity: number;
   wDrawdown: number;
-  // Recommendation thresholds (risk score at which we escalate)
   reduceRiskAt: number;
   rebalanceAt: number;
-  // Human-readable goal summary for use in reasoning text
   goalSummary: string;
 };
+
+async function generateLLMReasoning(
+  goal: string,
+  profile: GoalProfile,
+  riskScore: number,
+  recommendation: string,
+  C: number, V: number, S: number, L: number, D: number,
+  marketRegime: string,
+  alerts: string[],
+  topPositions: Array<{ symbol: string; weight: number; valueUsd: number }>,
+  marketData: WatchSignal['marketData'],
+  portfolioValue: number,
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null as unknown as string; // fallback handled by caller
+
+  const client = new Anthropic({ apiKey });
+
+  const prompt = `You are a DeFi portfolio risk analyst. Write a clear, concise 2-3 sentence reasoning paragraph explaining a strategy recommendation to a crypto investor.
+
+Portfolio context:
+- Goal: ${goal}
+- Portfolio value: $${portfolioValue.toLocaleString()}
+- Top holdings: ${topPositions.map(p => `${p.symbol} (${p.weight.toFixed(1)}%)`).join(', ')}
+- Market regime: ${marketRegime}
+- Fear & Greed index: ${marketData?.fearGreedIndex ?? 'N/A'} (${marketData?.fearGreedLabel ?? 'N/A'})
+- 24h avg volatility: ${marketData?.avgVolatility24h.toFixed(1) ?? 'N/A'}%
+- Avg drawdown from ATH: ${marketData?.avgAthDrawdown.toFixed(1) ?? 'N/A'}%
+
+Risk breakdown (0-100 scale, higher = riskier):
+- Concentration: ${C}/100
+- Volatility: ${V}/100
+- Market sentiment: ${S}/100
+- Liquidity: ${L}/100
+- Drawdown proximity: ${D}/100
+- Overall risk score: ${riskScore}/100
+
+Recommendation: ${recommendation}
+${alerts.length > 0 ? `Key alerts: ${alerts.join('; ')}` : ''}
+
+Write a plain English explanation of why this recommendation makes sense given the data. Be specific about the numbers but explain them in plain language a non-expert can understand. No bullet points, no headers — just flowing prose.`;
+
+  const message = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = message.content[0];
+  return content.type === 'text' ? content.text.trim() : (null as unknown as string);
+}
+
+// ---------------------------------------------------------------------------
+// Goal profile — parsed from free-text goal, controls risk weights + thresholds
+// ---------------------------------------------------------------------------
 
 function parseGoalProfile(goal: string): GoalProfile {
   const g = goal.toLowerCase();
@@ -199,7 +248,7 @@ export async function runStrategist(signal: WatchSignal, goal: string): Promise<
     recommendation = 'INCREASE_EXPOSURE';
   }
 
-  // --- Reasoning — goal-aware, uses actual numbers ---
+  // --- Reasoning — LLM-generated if ANTHROPIC_API_KEY is set, otherwise template fallback ---
   const fgStr = marketData
     ? `${marketData.fearGreedLabel} (${marketData.fearGreedIndex}/100)`
     : 'N/A';
@@ -207,7 +256,7 @@ export async function runStrategist(signal: WatchSignal, goal: string): Promise<
   const liqStr = marketData ? `${(marketData.avgLiquidityRatio * 100).toFixed(2)}%` : 'N/A';
   const athStr = marketData ? `${marketData.avgAthDrawdown.toFixed(1)}% from ATH` : 'N/A';
 
-  const reasoning = portfolioValue === 0
+  const templateReasoning = portfolioValue === 0
     ? 'Portfolio is empty. Add holdings to receive a strategy.'
     : [
         `Goal: ${profile.goalSummary}.`,
@@ -218,6 +267,20 @@ export async function runStrategist(signal: WatchSignal, goal: string): Promise<
         `Market regime: ${marketRegime}.`,
         alerts.length > 0 ? `Alerts: ${alerts.join('; ')}.` : '',
       ].filter(Boolean).join(' ');
+
+  let reasoning = templateReasoning;
+  if (portfolioValue > 0) {
+    try {
+      const llmReasoning = await generateLLMReasoning(
+        goal, profile, riskScore, recommendation,
+        C, V, S, L, D,
+        marketRegime, alerts, topPositions, marketData, portfolioValue,
+      );
+      if (llmReasoning) reasoning = llmReasoning;
+    } catch {
+      // LLM call failed — keep template reasoning
+    }
+  }
 
   // --- Worst-case analysis — goal-aware language ---
   const goalContext = profile.label === 'conservative'
