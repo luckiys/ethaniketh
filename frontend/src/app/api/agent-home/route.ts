@@ -9,6 +9,7 @@ import {
   generateAgentHome,
   getAllAgentHomes,
   getRiskLevelFromScore,
+  cacheLiveHome,
   type AgentPersonality,
   type RiskLevel,
 } from '@/server/blockade-skybox';
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
     (riskScore !== undefined ? getRiskLevelFromScore(riskScore) : 'moderate');
 
   const home = await generateAgentHome(agent as AgentPersonality, level);
+  if (!home.mockMode) cacheLiveHome(home); // cache live results for GET /api/agent-home
 
   return NextResponse.json({
     bounty: 'Blockade Labs: Solving the Homeless Agent Problem',

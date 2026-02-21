@@ -86,6 +86,40 @@ const MOCK_HOMES: Record<AgentPersonality, AgentHome> = {
   },
 };
 
+// Poll Blockade Labs for a completed skybox (generation is async, takes 10-30s)
+async function pollSkyboxResult(jobId: string, maxWaitMs = 45000): Promise<{
+  id: string; title: string; thumb_url: string; file_url: string; status: string;
+}> {
+  const start = Date.now();
+  const interval = 3000; // poll every 3 seconds
+
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, interval));
+
+    const res = await fetch(`${BLOCKADE_API_URL}/imagine/requests/${jobId}`, {
+      headers: { 'x-api-key': BLOCKADE_API_KEY },
+    });
+
+    if (!res.ok) throw new Error(`Poll error: ${res.status}`);
+
+    const data = await res.json() as {
+      request: { id: string; title: string; thumb_url: string; file_url: string; status: string };
+    };
+
+    const req = data.request;
+    if (req.status === 'complete' && req.file_url) {
+      return { id: String(req.id), title: req.title, thumb_url: req.thumb_url, file_url: req.file_url, status: req.status };
+    }
+    if (req.status === 'error' || req.status === 'failed') {
+      throw new Error(`Skybox generation failed: ${req.status}`);
+    }
+
+    console.log(`[blockade] skybox ${jobId} status: ${req.status} — waiting...`);
+  }
+
+  throw new Error('Skybox generation timed out after 45s');
+}
+
 export async function generateAgentHome(
   agentId: AgentPersonality,
   riskLevel: RiskLevel = 'moderate'
@@ -98,7 +132,8 @@ export async function generateAgentHome(
   const prompt = `${AGENT_PROMPTS[agentId]}, ${RISK_STYLES[riskLevel]}`;
 
   try {
-    const res = await fetch(`${BLOCKADE_API_URL}/skybox`, {
+    // Step 1: Submit the skybox generation job
+    const submitRes = await fetch(`${BLOCKADE_API_URL}/skybox`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -111,24 +146,47 @@ export async function generateAgentHome(
       }),
     });
 
-    if (!res.ok) {
-      throw new Error(`Blockade API error: ${res.status}`);
+    if (!submitRes.ok) {
+      const errText = await submitRes.text().catch(() => '');
+      throw new Error(`Blockade submit error: ${submitRes.status} — ${errText}`);
     }
 
-    const data = await res.json() as {
-      id: string;
-      title: string;
-      thumb_url: string;
-      file_url: string;
+    const job = await submitRes.json() as {
+      id: string | number;
+      status: string;
+      title?: string;
+      thumb_url?: string;
+      file_url?: string;
     };
+
+    const jobId = String(job.id);
+
+    // Step 2: If already complete (rare but possible), return immediately
+    if (job.status === 'complete' && job.file_url) {
+      return {
+        agentId,
+        skyboxId: jobId,
+        title: job.title ?? `AegisOS ${agentId} Home`,
+        prompt,
+        thumbUrl: job.thumb_url ?? '',
+        exportUrl: job.file_url,
+        generatedAt: new Date().toISOString(),
+        riskLevel,
+        mockMode: false,
+      };
+    }
+
+    // Step 3: Poll until complete (Blockade Labs is async — takes 10-30s)
+    console.log(`[blockade] skybox job ${jobId} submitted, polling for completion...`);
+    const result = await pollSkyboxResult(jobId);
 
     return {
       agentId,
-      skyboxId: String(data.id),
-      title: data.title,
+      skyboxId: result.id,
+      title: result.title ?? `AegisOS ${agentId} Home`,
       prompt,
-      thumbUrl: data.thumb_url,
-      exportUrl: data.file_url,
+      thumbUrl: result.thumb_url ?? '',
+      exportUrl: result.file_url,
       generatedAt: new Date().toISOString(),
       riskLevel,
       mockMode: false,
@@ -139,8 +197,17 @@ export async function generateAgentHome(
   }
 }
 
+// In-memory cache for live-generated homes (so GET /api/agent-home shows live data)
+const liveHomesCache = new Map<AgentPersonality, AgentHome>();
+
+export function cacheLiveHome(home: AgentHome): void {
+  liveHomesCache.set(home.agentId, home);
+}
+
 export function getAllAgentHomes(): AgentHome[] {
-  return Object.values(MOCK_HOMES);
+  // Merge: live cache overrides mock defaults
+  const agents: AgentPersonality[] = ['watcher', 'strategist', 'executor'];
+  return agents.map((a) => liveHomesCache.get(a) ?? MOCK_HOMES[a]);
 }
 
 export function getRiskLevelFromScore(riskScore: number): RiskLevel {

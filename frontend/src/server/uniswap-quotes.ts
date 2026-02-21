@@ -10,14 +10,18 @@
  * Free API key: https://developers.uniswap.org/dashboard
  */
 
-const UNISWAP_API_URL = 'https://trade-api.gateway.uniswap.org/v1';
+// Correct URL per official docs: https://api-docs.uniswap.org
+const UNISWAP_API_URL = 'https://trade-api.uniswap.org/v1';
 const UNISWAP_API_KEY = process.env.UNISWAP_API_KEY ?? '';
 
-// Well-known token addresses (Base Sepolia + mainnet for quotes)
+// Placeholder swapper for server-side quote requests (no execution)
+const QUOTE_SWAPPER = '0x0000000000000000000000000000000000000001';
+
+// All mainnet addresses — quotes use chainId 1
 export const TOKENS = {
   ETH:  { address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', decimals: 18, symbol: 'ETH' },
-  USDC: { address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', decimals: 6,  symbol: 'USDC' }, // Base
-  WBTC: { address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8,  symbol: 'WBTC' }, // mainnet
+  USDC: { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6,  symbol: 'USDC' }, // Ethereum mainnet
+  WBTC: { address: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', decimals: 8,  symbol: 'WBTC' },
   DAI:  { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', decimals: 18, symbol: 'DAI' },
   WETH: { address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', decimals: 18, symbol: 'WETH' },
 } as const;
@@ -100,22 +104,61 @@ export async function getSwapQuote(
         tokenOut: tokenOutData.address,
         amount: amountInWei,
         type: 'EXACT_INPUT',
-        intent: 'quote',
+        swapper: QUOTE_SWAPPER,       // required per API docs
+        slippageTolerance: 0.5,       // 0.5% — required (or autoSlippage)
       }),
     });
 
-    if (!res.ok) throw new Error(`Uniswap API error: ${res.status}`);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Uniswap API error: ${res.status} — ${errText}`);
+    }
 
+    // Per official docs: QuoteResponse { routing, classicQuote?: ClassicQuote, ... }
+    // ClassicQuote has: outputAmount (wei string), priceImpact, routeString, gasUseEstimateUSD
     const data = await res.json() as {
-      quote: { amount: string };
-      priceImpact: string;
-      routeString: string;
-      gasUseEstimateUSD: string;
+      routing: number;  // 0=CLASSIC, 1=DUTCH_LIMIT, 2=DUTCH_V2, etc.
+      classicQuote?: {
+        outputAmount: string;
+        inputAmount?: string;
+        priceImpact?: number | string;
+        routeString?: string;
+        gasUseEstimateUSD?: string;
+        blockNumber?: string;
+      };
+      // Fallback: some response shapes vary
+      quote?: {
+        outputAmount?: string;
+        output?: { amount: string };
+        amount?: string;
+        priceImpact?: string | number;
+        routeString?: string;
+        gasUseEstimateUSD?: string;
+      };
     };
 
+    // Extract output amount — prefer classicQuote, fall back to legacy quote shapes
+    const classicQ = data.classicQuote;
+    const legacyQ  = data.quote;
+
+    const rawOutWei =
+      classicQ?.outputAmount ??
+      legacyQ?.outputAmount ??
+      legacyQ?.output?.amount ??
+      legacyQ?.amount ??
+      '0';
+
     const outDecimals = tokenOutData.decimals;
-    const outAmount = (Number(data.quote.amount) / 10 ** outDecimals).toFixed(6);
+    const outAmount = (Number(rawOutWei) / 10 ** outDecimals).toFixed(6);
     const outMin = (parseFloat(outAmount) * 0.995).toFixed(6);
+
+    const priceImpact = classicQ?.priceImpact ?? legacyQ?.priceImpact ?? '0.1';
+    const routeString = classicQ?.routeString ?? legacyQ?.routeString ?? `${tokenIn} → ${tokenOut}`;
+    const gasUSD = classicQ?.gasUseEstimateUSD ?? legacyQ?.gasUseEstimateUSD ?? '0';
+
+    if (!rawOutWei || rawOutWei === '0' || isNaN(parseFloat(outAmount))) {
+      throw new Error(`Uniswap returned invalid output (routing=${data.routing}) — falling back to mock`);
+    }
 
     return {
       tokenIn,
@@ -123,9 +166,9 @@ export async function getSwapQuote(
       amountIn,
       amountOut: outAmount,
       amountOutMin: outMin,
-      priceImpact: data.priceImpact,
-      route: data.routeString?.split(' > ') ?? [tokenIn, tokenOut],
-      gasEstimate: `$${parseFloat(data.gasUseEstimateUSD).toFixed(2)}`,
+      priceImpact: String(priceImpact),
+      route: routeString.split(/\s*(?:->|→|>|\|)\s*/).filter(Boolean),
+      gasEstimate: gasUSD !== '0' ? `$${parseFloat(gasUSD).toFixed(2)}` : 'included',
       executionPrice: `1 ${tokenIn} = ${(parseFloat(outAmount) / parseFloat(amountIn)).toFixed(2)} ${tokenOut}`,
       mockMode: false,
       fetchedAt: new Date().toISOString(),
