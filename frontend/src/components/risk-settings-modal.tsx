@@ -79,38 +79,15 @@ export function RiskSettingsModal({ current, onSave, onClose }: RiskSettingsModa
   const [customValue, setCustomValue] = useState<number>(
     current.mode === 'custom' ? current.value : 50
   );
-  const [sliderValue, setSliderValue] = useState<number>(current.value);
-
-  const handleModeChange = (mode: RiskMode) => {
-    if (mode === selectedMode) return;
-    setSelectedMode(mode);
-    if (mode === 'custom') {
-      setSliderValue(customValue);
-    } else {
-      const preset = PRESETS.find((p) => p.mode === mode);
-      if (preset) setSliderValue(preset.defaultValue);
-    }
-  };
 
   const effectiveValue = selectedMode === 'custom'
     ? customValue
-    : PRESETS.find((p) => p.mode === selectedMode)?.defaultValue ?? sliderValue;
+    : PRESETS.find((p) => p.mode === selectedMode)!.defaultValue;
 
   const handleSave = () => {
     onSave({ mode: selectedMode, value: effectiveValue });
     onClose();
   };
-
-  const getRangeForMode = (mode: RiskMode): [number, number] => {
-    switch (mode) {
-      case 'low': return [0, 35];
-      case 'medium': return [36, 72];
-      case 'high': return [73, 100];
-      case 'custom': return [0, 100];
-    }
-  };
-
-  const [min, max] = getRangeForMode(selectedMode);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -140,7 +117,7 @@ export function RiskSettingsModal({ current, onSave, onClose }: RiskSettingsModa
             {PRESETS.map((preset) => (
               <button
                 key={preset.mode}
-                onClick={() => handleModeChange(preset.mode)}
+                onClick={() => setSelectedMode(preset.mode)}
                 className={`relative flex flex-col gap-1 rounded-lg border p-3 text-left transition-all ${
                   selectedMode === preset.mode
                     ? `${preset.bg} ${preset.border}`

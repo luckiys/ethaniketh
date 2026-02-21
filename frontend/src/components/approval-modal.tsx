@@ -81,42 +81,30 @@ export function ApprovalModal({
   const risk = riskMeta(activePlan.riskScore);
   const isOriginal = selectedPlanIndex === -1;
 
-  useEffect(() => {
-    const ctx = (activePlan as { decisionContext?: Record<string, unknown> }).decisionContext;
+  const fetchSimplified = () => {
+    if (humanizing) return;
     setHumanizing(true);
-    setHumanReasoning(null);
+    const ctx = (activePlan as { decisionContext?: Record<string, unknown> }).decisionContext;
 
-    if (ctx && Object.keys(ctx).length > 0) {
-      fetch('/api/explain-strategy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decisionContext: ctx }),
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .then((data) => {
-          if (data?.steps) setHumanReasoning(data.steps);
-        })
-        .catch(() => {})
-        .finally(() => setHumanizing(false));
-      return;
-    }
+    const endpoint = ctx && Object.keys(ctx).length > 0
+      ? { url: '/api/explain-strategy', body: { decisionContext: ctx }, key: 'steps' }
+      : { url: '/api/humanize-reasoning', body: { reasoning: activePlan.reasoning, worstCaseAnalysis: activePlan.worstCaseAnalysis }, key: 'humanized' };
 
-    const combined = [activePlan.worstCaseAnalysis, activePlan.reasoning].filter(Boolean).join(' ').trim();
-    if (!combined) {
-      setHumanizing(false);
-      return;
-    }
-    fetch('/api/humanize-reasoning', {
+    fetch(endpoint.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reasoning: activePlan.reasoning, worstCaseAnalysis: activePlan.worstCaseAnalysis }),
+      body: JSON.stringify(endpoint.body),
     })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
-        if (data?.humanized) setHumanReasoning(data.humanized);
+        if (data?.[endpoint.key]) setHumanReasoning(data[endpoint.key]);
       })
       .catch(() => {})
       .finally(() => setHumanizing(false));
+  };
+
+  useEffect(() => {
+    setHumanReasoning(null);
   }, [activePlan]);
 
   const handleApprove = async () => {
@@ -196,16 +184,27 @@ export function ApprovalModal({
 
           {/* AI explanation */}
           <div className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--border)' }}>
-            <span className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-muted)' }}>
-              {humanizing ? 'Explaining our logic…' : 'Why we recommend this'}
-            </span>
-            <div className="mt-2 leading-relaxed text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {humanizing && !humanReasoning ? (
-                <p style={{ color: 'var(--text-tertiary)' }}>Turning our analysis into plain language for you…</p>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-muted)' }}>
+                {humanReasoning ? 'AI-simplified explanation' : 'Why we recommend this'}
+              </span>
+              {!humanReasoning && !humanizing && (
+                <button
+                  onClick={fetchSimplified}
+                  className="text-[0.6875rem] font-medium px-2 py-1 rounded-md transition-colors"
+                  style={{ color: 'var(--accent-blue)', background: 'var(--bg-card-hover)' }}
+                >
+                  Simplify with AI
+                </button>
+              )}
+            </div>
+            <div className="leading-relaxed text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {humanizing ? (
+                <p style={{ color: 'var(--text-tertiary)' }}>Simplifying with AI…</p>
               ) : humanReasoning ? (
                 <div className="whitespace-pre-wrap">{humanReasoning}</div>
               ) : (
-                <p>{`We recommend ${activePlan.recommendation.replace(/_/g, ' ').toLowerCase()} based on your portfolio. Expand below to see the full logic.`}</p>
+                <div className="whitespace-pre-wrap">{activePlan.reasoning || `We recommend ${activePlan.recommendation.replace(/_/g, ' ').toLowerCase()} based on your portfolio.`}</div>
               )}
             </div>
           </div>

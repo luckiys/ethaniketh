@@ -149,7 +149,7 @@ const DEFAULT_SUMMARIES: Record<GoalProfile['label'], string> = {
 
 /** LLM-based goal interpretation — understands natural language like "saving for a house" or "I want passive income" */
 async function interpretGoalWithLLM(goal: string): Promise<{ label: GoalProfile['label']; goalSummary: string } | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
+  if (!process.env.OPENROUTER_API_KEY) return null;
 
   try {
     const prompt = `You are a DeFi portfolio advisor. A user described their investment goal in plain language. Classify it into exactly one of: conservative, balanced, aggressive, yield.

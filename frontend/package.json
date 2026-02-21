@@ -10,10 +10,9 @@
   },
   "dependencies": {
     "@0glabs/0g-ts-sdk": "^0.3.3",
-    "@mudra/shared": "file:../shared",
     "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.42.0",
     "@hashgraph/sdk": "^2.48.0",
+    "@mudra/shared": "file:../shared",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.0",
     "@solana/web3.js": "^1.98.4",

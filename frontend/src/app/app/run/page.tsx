@@ -12,26 +12,29 @@ import type { RiskSetting } from '@/components/risk-settings-modal';
 import type { Holding, AgentEvent, StrategyPlan, AgentId } from '@mudra/shared';
 import { signApproval } from '@/lib/sign';
 
-function loadRiskSetting(): RiskSetting {
-  if (typeof window === 'undefined') return { mode: 'medium', value: 54 };
-  try {
-    const stored = localStorage.getItem('mudra-risk-setting');
-    if (stored) {
-      const parsed = JSON.parse(stored) as RiskSetting;
-      if (parsed && parsed.mode && typeof parsed.value === 'number') return parsed;
-    }
-  } catch {}
-  return { mode: 'medium', value: 54 };
-}
+const RISK_STORAGE_KEY = 'mudra-risk-setting';
+const DEFAULT_RISK: RiskSetting = { mode: 'medium', value: 54 };
 
 export default function RunPage() {
   const [goal, setGoal] = useState('Maximize yield while keeping risk low');
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [riskSetting, setRiskSettingState] = useState<RiskSetting>(loadRiskSetting);
+  const [riskSetting, setRiskSettingRaw] = useState<RiskSetting>(DEFAULT_RISK);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(RISK_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as RiskSetting;
+        if (parsed && parsed.mode && typeof parsed.value === 'number') {
+          setRiskSettingRaw(parsed);
+        }
+      }
+    } catch {}
+  }, []);
 
   const setRiskSetting = useCallback((s: RiskSetting) => {
-    setRiskSettingState(s);
-    try { localStorage.setItem('mudra-risk-setting', JSON.stringify(s)); } catch {}
+    setRiskSettingRaw(s);
+    try { localStorage.setItem(RISK_STORAGE_KEY, JSON.stringify(s)); } catch {}
   }, []);
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
