@@ -20,24 +20,19 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(geminiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const prompt = `You are a friendly crypto educator. Someone new to crypto just ran their portfolio through our analysis. They want to save money and get simple suggestions — they are NOT experts.
-
-Below is the EXACT data our system computed and the decisions it made. Your job: translate this into 4–6 numbered steps that explain WHAT we looked at and WHY we recommend what we did.
+    const prompt = `You are a friendly financial advisor explaining a portfolio recommendation to someone who is NOT a crypto expert. Write 2-3 conversational sentences in plain English.
 
 Rules:
-- Use plain language. No jargon. Say "your biggest holding" not "concentration score". Say "market mood" not "Fear & Greed index".
-- Each step should answer: "What did we look at?" or "Why did we decide this?"
-- Be warm and reassuring. They're beginners trying to protect their money.
-- NO raw numbers like "68/100". Use words: "high", "moderate", "low", "most of", "a lot", "some".
-- End with a clear "Here's what we suggest" summary.
+- Sound like a knowledgeable friend, not a report. Use "we", "your", "because".
+- NO numbers, scores, or percentages. Use words like "heavily concentrated", "quite volatile", "a lot of risk", "the market is nervous".
+- NO bullet points, NO numbered lists, NO headers. Just flowing prose.
+- Cover: what we noticed about their portfolio, why it's a concern given their goal, and what we're suggesting.
+- Be warm and direct. Example tone: "We noticed most of your portfolio is sitting in one asset, and since you want to grow safely, that level of concentration puts you at more risk than necessary. The market is also showing signs of nervousness right now, so we're suggesting a partial rebalance to spread things out a bit."
 
-Decision data from our system:
+Decision data:
 ${JSON.stringify(decisionContext, null, 2)}
 
-Write 4–6 numbered steps. Format as:
-1. [Step one]
-2. [Step two]
-...`;
+Write 2-3 sentences of plain English explanation. No lists, no numbers:`;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
