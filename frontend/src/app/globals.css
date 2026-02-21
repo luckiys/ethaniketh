@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dark theme (default) ─────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  --bg-base: #09090b;
+  --bg-elevated: #18181b;
+  --bg-card: #0f0f12;
+  --bg-card-hover: #1a1a1f;
+  --bg-input: rgba(9, 9, 11, 0.6);
+  --bg-sidebar: #09090b;
+  --border: #27272a;
+  --border-subtle: rgba(39, 39, 42, 0.6);
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-muted: #52525b;
+  --accent-blue: #3b82f6;
+  --accent-emerald: #10b981;
+  --accent-violet: #8b5cf6;
+  --accent-amber: #f59e0b;
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 0 60px -12px rgba(59, 130, 246, 0.12);
+  color-scheme: dark;
+}
+
+/* ── Light theme ──────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-base: #f8f9fb;
+  --bg-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f4f4f5;
+  --bg-input: #ffffff;
+  --bg-sidebar: #ffffff;
+  --border: #e4e4e7;
+  --border-subtle: rgba(228, 228, 231, 0.7);
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-tertiary: #71717a;
+  --text-muted: #a1a1aa;
+  --accent-blue: #2563eb;
+  --accent-emerald: #059669;
+  --accent-violet: #7c3aed;
+  --accent-amber: #d97706;
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-elevated: 0 4px 6px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 0 40px -12px rgba(59, 130, 246, 0.08);
+  color-scheme: light;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  .font-mono {
+    font-family: ui-monospace, 'SF Mono', Monaco, monospace;
+  }
+}
+
+/* ── Theme-aware utility classes ──────────────────────────────── */
+@layer utilities {
+  .theme-bg { background: var(--bg-base); }
+  .theme-bg-elevated { background: var(--bg-elevated); }
+  .theme-bg-card { background: var(--bg-card); }
+  .theme-bg-card-hover { background: var(--bg-card-hover); }
+  .theme-bg-sidebar { background: var(--bg-sidebar); }
+  .theme-bg-input { background: var(--bg-input); }
+  .theme-border { border-color: var(--border); }
+  .theme-border-subtle { border-color: var(--border-subtle); }
+  .theme-text { color: var(--text-primary); }
+  .theme-text-secondary { color: var(--text-secondary); }
+  .theme-text-tertiary { color: var(--text-tertiary); }
+  .theme-text-muted { color: var(--text-muted); }
+  .theme-shadow { box-shadow: var(--shadow-soft); }
+  .theme-shadow-elevated { box-shadow: var(--shadow-elevated); }
+}
+
+/* ── Light mode overrides for zinc-* classes used across components ── */
+[data-theme="light"] .light\:bg-white { background: #ffffff; }
+
+[data-theme="light"] {
+  /* Sidebar & layout */
+  & .sidebar-root { background: var(--bg-sidebar); border-color: var(--border); }
+  & .layout-main { background: var(--bg-base); }
+  & .layout-topbar { border-color: var(--border); background: var(--bg-elevated); }
+
+  /* Cards */
+  & .card { background: var(--bg-card); border-color: var(--border); box-shadow: var(--shadow-soft); }
+  & .card:hover { background: var(--bg-card-hover); }
+
+  /* Inputs */
+  & textarea, & input[type="text"], & input[type="number"] {
+    background: var(--bg-input);
+    border-color: var(--border);
+    color: var(--text-primary);
+  }
+}
