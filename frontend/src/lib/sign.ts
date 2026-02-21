@@ -1,9 +1,12 @@
 import type { WalletClient } from 'viem';
 
+// Base Sepolia testnet — sign/approve on testnet, not mainnet
+const SIGN_CHAIN_ID = 84532; // Base Sepolia
+
 const EIP712_DOMAIN = {
   name: 'AegisOS',
   version: '1',
-  chainId: 8453, // Base
+  chainId: SIGN_CHAIN_ID,
 } as const;
 
 const EIP712_TYPES = {

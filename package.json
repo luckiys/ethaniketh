@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm run build:shared && npm run dev --prefix frontend",
     "dev:all": "npm run build:shared && concurrently --names \"backend,frontend\" --prefix-colors \"cyan,green\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:services": "concurrently --names \"var,portfolio\" --prefix-colors \"yellow,magenta\" \"cd services/var && uvicorn var_api:app --host 0.0.0.0 --port 5001\" \"cd services/portfolio && uvicorn portfolio_api:app --host 0.0.0.0 --port 5002\"",
     "build:shared": "npm run build --prefix shared 2>/dev/null || (cd shared && npm install && npm run build)",
     "build": "npm run build:shared && npm run build --prefix frontend",
     "start": "npm run start --prefix frontend",

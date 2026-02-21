@@ -32,6 +32,11 @@ export const WatchSignalSchema = z.object({
     avgVolatility24h: z.number(),        // portfolio-weighted avg |24h % change|
     avgLiquidityRatio: z.number(),       // portfolio-weighted avg (24h volume / market cap)
     avgAthDrawdown: z.number(),          // portfolio-weighted avg % below ATH (negative, e.g. -30)
+    fundingRateAvg: z.number().optional(), // Binance perpetual funding rate avg (e.g. 0.0001 = 0.01%), >0.1% euphoria, <-0.05% fear
+    var95: z.number().optional(),        // 95% VaR as % (e.g. 2.5 = max 2.5% loss at 95% confidence)
+    volatilityAnnualized: z.number().optional(), // Portfolio annualized volatility %
+    protocolRiskScore: z.number().optional(),    // DeFiLlama TVL-based protocol risk 0-100
+    macroRegime: z.enum(['risk-on', 'risk-off', 'neutral']).optional(),
     perAsset: z.array(z.object({
       symbol: z.string(),
       change24h: z.number(),
@@ -56,6 +61,7 @@ export const StrategyPlanSchema = z.object({
   })),
   reasoning: z.string(),
   expiresAt: z.string(),
+  decisionContext: z.record(z.unknown()).optional(),
 });
 
 export const ApprovalRequestSchema = z.object({

@@ -31,10 +31,21 @@ const SCHEDULER_ABI = [
     type: 'function',
     inputs: [
       { name: 'planHash', type: 'bytes32' },
-      { name: 'token',    type: 'address' },
-      { name: 'sender',  type: 'address' },
-      { name: 'receiver',type: 'address' },
-      { name: 'amount',  type: 'int64' },
+      { name: 'token', type: 'address' },
+      { name: 'sender', type: 'address' },
+      { name: 'receiver', type: 'address' },
+      { name: 'amount', type: 'int64' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'scheduleHbarRebalance',
+    type: 'function',
+    inputs: [
+      { name: 'planHash', type: 'bytes32' },
+      { name: 'receiver', type: 'address' },
+      { name: 'amount', type: 'uint64' },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
@@ -44,6 +55,20 @@ const SCHEDULER_ABI = [
     type: 'function',
     inputs: [{ name: 'planHash', type: 'bytes32' }],
     outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'isPlanApproved',
+    type: 'function',
+    inputs: [{ name: 'planHash', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'getScheduleAddress',
+    type: 'function',
+    inputs: [{ name: 'planHash', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'address' }],
     stateMutability: 'view',
   },
 ] as const;
@@ -60,19 +85,16 @@ function toPlanHashBytes32(planHash: string): `0x${string}` {
 }
 
 /**
- * Calls approvePlan + scheduleRebalance on the AegisScheduler contract via
- * the Hedera JSON-RPC relay. Returns the schedule EVM address.
+ * Calls approvePlan + scheduleHbarRebalance (or scheduleRebalance if HTS token) on the
+ * AegisScheduler contract via Hedera JSON-RPC. Returns the tx hash.
  *
- * Falls back gracefully if:
- *   - AEGIS_SCHEDULER_ADDRESS is not set (contract not deployed yet)
- *   - HEDERA_EVM_DEPLOYER_KEY is not set
- *   - The RPC call fails for any reason
+ * Uses scheduleHbarRebalance when no HTS token — no token creation needed.
+ * Contract must be funded with 0.01 HBAR (done by deploy script).
  */
 async function callSchedulerContract(
   planHash: string,
-  tokenAddress: string,
-  senderAddress: string,
-  receiverAddress: string,
+  receiverEvmAddress: `0x${string}`,
+  useHbar: boolean,
   amount: bigint
 ): Promise<string | null> {
   if (!SCHEDULER_ADDRESS || !EVM_PRIVATE_KEY) return null;
@@ -104,32 +126,62 @@ async function callSchedulerContract(
 
     const hashBytes32 = toPlanHashBytes32(planHash);
 
-    // 1. Record the approval on-chain
-    const approveTx = await walletClient.writeContract({
+    // 1. Record the approval on-chain (skip if already approved, e.g. retry)
+    const alreadyApproved = await publicClient.readContract({
       address: SCHEDULER_ADDRESS,
       abi: SCHEDULER_ABI,
-      functionName: 'approvePlan',
+      functionName: 'isPlanApproved',
       args: [hashBytes32],
     });
-    await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    if (!alreadyApproved) {
+      const approveTx = await walletClient.writeContract({
+        address: SCHEDULER_ADDRESS,
+        abi: SCHEDULER_ABI,
+        functionName: 'approvePlan',
+        args: [hashBytes32],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    }
 
-    // 2. Create the scheduled token transfer via Hedera Schedule Service precompile
-    //    Token + account addresses must be Hedera EVM aliases (0x...)
-    const scheduleTx = await walletClient.writeContract({
+    // 2. Create the scheduled transfer via Hedera Schedule Service
+    const scheduleAddr = await publicClient.readContract({
       address: SCHEDULER_ADDRESS,
       abi: SCHEDULER_ABI,
-      functionName: 'scheduleRebalance',
-      args: [
-        hashBytes32,
-        tokenAddress as `0x${string}`,
-        senderAddress as `0x${string}`,
-        receiverAddress as `0x${string}`,
-        amount,
-      ],
+      functionName: 'getScheduleAddress',
+      args: [hashBytes32],
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: scheduleTx });
+    if (scheduleAddr !== '0x0000000000000000000000000000000000000000') {
+      return `already-scheduled:${scheduleAddr}`;
+    }
 
-    return receipt.transactionHash;
+    if (useHbar) {
+      // scheduleHbarRebalance: 0.01 HBAR = 1e6 tinybars (contract must be funded)
+      const hbarAmount = BigInt(1e6); // 0.01 HBAR
+      const scheduleTx = await walletClient.writeContract({
+        address: SCHEDULER_ADDRESS,
+        abi: SCHEDULER_ABI,
+        functionName: 'scheduleHbarRebalance',
+        args: [hashBytes32, receiverEvmAddress, hbarAmount],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: scheduleTx });
+      return receipt.transactionHash;
+    }
+
+    // scheduleRebalance (HTS token) — when HEDERA_HTS_TOKEN_EVM is set
+    const tokenEvm = process.env.HEDERA_HTS_TOKEN_EVM as `0x${string}` | undefined;
+    const senderEvm = receiverEvmAddress; // treasury = deployer
+    if (tokenEvm) {
+      const scheduleTx = await walletClient.writeContract({
+        address: SCHEDULER_ADDRESS,
+        abi: SCHEDULER_ABI,
+        functionName: 'scheduleRebalance',
+        args: [hashBytes32, tokenEvm, senderEvm, receiverEvmAddress, amount],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: scheduleTx });
+      return receipt.transactionHash;
+    }
+
+    return null;
   } catch (e) {
     console.error('[executor] scheduler contract call failed:', e);
     return null;
@@ -144,6 +196,7 @@ export async function runExecutor(
   _signature: string
 ): Promise<{ htsTxId: string; steps: string[] }> {
   const steps: string[] = [];
+  let scheduleTxHash: string | null = null;
 
   for (const action of plan.actions) {
     if (action.type === 'TRANSFER') {
@@ -157,22 +210,15 @@ export async function runExecutor(
         steps.push(`SIMULATED TRANSFER ${action.token} ${action.amount}`);
       }
 
-      // Path B (runs in parallel, independent): schedule the transfer on-chain
-      // via AegisScheduler.sol → Hedera Schedule Service precompile.
-      // This creates a future-executing on-chain schedule, demonstrating
-      // contract-driven automation for the Hedera Schedule Service bounty.
-      if (SCHEDULER_ADDRESS && EVM_PRIVATE_KEY) {
-        // In production these would be real Hedera EVM alias addresses.
-        // For demo we use zero-padded placeholders.
-        const tokenEvm  = '0x0000000000000000000000000000000000000001';
-        const senderEvm = '0x0000000000000000000000000000000000000002';
-        const recvEvm   = '0x0000000000000000000000000000000000000003';
-
-        const scheduleTxHash = await callSchedulerContract(
+      // Path B: schedule once per plan via AegisScheduler (contract holds 0.01 HBAR)
+      if (!scheduleTxHash && SCHEDULER_ADDRESS && EVM_PRIVATE_KEY) {
+        const { privateKeyToAccount } = await import('viem/accounts');
+        const deployerEvm = privateKeyToAccount(EVM_PRIVATE_KEY).address as `0x${string}`;
+        const useHbar = !process.env.HEDERA_HTS_TOKEN_EVM;
+        scheduleTxHash = await callSchedulerContract(
           approvedPlanHash,
-          tokenEvm,
-          senderEvm,
-          recvEvm,
+          deployerEvm,
+          useHbar,
           BigInt(amount)
         );
         if (scheduleTxHash) {
@@ -186,13 +232,28 @@ export async function runExecutor(
 
   if (plan.actions.length === 0) {
     steps.push('No actions to execute (HOLD recommendation)');
+    // Still demonstrate Schedule Service: schedule 0.01 HBAR transfer
+    if (SCHEDULER_ADDRESS && EVM_PRIVATE_KEY) {
+      const { privateKeyToAccount } = await import('viem/accounts');
+      const deployerEvm = privateKeyToAccount(EVM_PRIVATE_KEY).address as `0x${string}`;
+      const useHbar = !process.env.HEDERA_HTS_TOKEN_EVM;
+      scheduleTxHash = await callSchedulerContract(
+        approvedPlanHash,
+        deployerEvm,
+        useHbar,
+        BigInt(1)
+      );
+      if (scheduleTxHash) {
+        steps.push(`SCHEDULED via AegisScheduler: ${scheduleTxHash}`);
+      }
+    }
   }
 
   const transferStep = steps.find((s) => s.startsWith('TRANSFER'));
   const scheduleStep = steps.find((s) => s.startsWith('SCHEDULED'));
   const htsTxId =
-    transferStep  ? (transferStep.split(': ')[1] ?? `mock-hts-${Date.now()}`) :
-    scheduleStep  ? (scheduleStep.split(': ')[1] ?? `mock-scheduled-${Date.now()}`) :
+    transferStep ? (transferStep.split(': ')[1] ?? `mock-hts-${Date.now()}`) :
+    scheduleStep ? (scheduleStep.split(': ')[1] ?? `mock-scheduled-${Date.now()}`) :
     `mock-hts-simulated-${Date.now()}`;
 
   return { htsTxId, steps };

@@ -7,6 +7,7 @@ import type { Holding, WatchSignal, StrategyPlan, SignedApproval } from '@aegiso
 import { WorkflowStateMachine } from './state-machine';
 import { publishToHcs, getOrCreateHcsTopic } from './hedera';
 import { mintAgentNfts, archiveStrategyBrain } from './og-inft';
+import { storeExecutedPlanToZeroG } from './zerog';
 import { runWatcher } from './agents/watcher';
 import { runStrategist } from './agents/strategist';
 import { runExecutor } from './agents/executor';
@@ -70,6 +71,7 @@ export interface SessionState {
   hederaTopicId: string;
   riskPreference?: number;
   currentPlan?: StrategyPlan;
+  alternatePlans?: StrategyPlan[];
   approvedPlanHash?: string;
   signature?: string;
   signerAddress?: string;
@@ -148,6 +150,7 @@ export async function runWorkflow(sessionId: string): Promise<{
   plan?: StrategyPlan;
   planHash?: string;
   stratBrainCid?: string;
+  alternatePlans?: StrategyPlan[];
   error?: string;
 }> {
   if (!sessions.has(sessionId)) syncFromFile();
@@ -174,8 +177,9 @@ export async function runWorkflow(sessionId: string): Promise<{
 
   sm.transition('PROPOSED');
 
-  const plan = await runStrategist(signal, state.goal, state.riskPreference);
+  const { plan, alternatePlans } = await runStrategist(signal, state.goal, state.riskPreference);
   state.currentPlan = plan;
+  state.alternatePlans = alternatePlans ?? [];
   syncToFile();
 
   // Archive the full strategy brain to 0g so the strategist's iNFT intelligence
@@ -204,7 +208,7 @@ export async function runWorkflow(sessionId: string): Promise<{
     expiresAt: plan.expiresAt,
   }, state.agentNftIds.strategist, plan.planId));
 
-  return { state: 'AWAITING_APPROVAL', signal, plan, planHash, stratBrainCid };
+  return { state: 'AWAITING_APPROVAL', signal, plan, planHash, stratBrainCid, alternatePlans: state.alternatePlans ?? [] };
 }
 
 export async function approvePlan(sessionId: string, approval: SignedApproval): Promise<{ success: boolean; error?: string }> {
@@ -229,7 +233,7 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
       const { verifyTypedData } = await import('viem');
       const isValid = await verifyTypedData({
         address: approval.signerAddress as `0x${string}`,
-        domain: { name: 'AegisOS', version: '1', chainId: BigInt(8453) },
+        domain: { name: 'AegisOS', version: '1', chainId: BigInt(84532) }, // Base Sepolia testnet
         types: {
           Approval: [
             { name: 'planId', type: 'string' },
@@ -266,6 +270,16 @@ export async function approvePlan(sessionId: string, approval: SignedApproval): 
   const { htsTxId, steps } = await runExecutor(state.currentPlan, planHash, approval.signature);
   state.htsTxId = htsTxId;
   syncToFile();
+
+  // 0g Labs DeFAI: store executed plan to 0G for decentralized audit trail
+  storeExecutedPlanToZeroG({
+    planId: state.currentPlan.planId,
+    planHash,
+    actions: state.currentPlan.actions,
+    htsTxId,
+    steps,
+    executedAt: new Date().toISOString(),
+  }).catch((e) => console.error('[orchestrator] 0g store plan failed:', e));
 
   const execPayload = { htsTxId, steps };
   emit(createEvent('EXECUTED', sessionId, 'executor', execPayload, state.agentNftIds.executor, state.currentPlan.planId));

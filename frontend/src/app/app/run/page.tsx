@@ -31,6 +31,7 @@ export default function RunPage() {
   const [plan, setPlan] = useState<StrategyPlan | null>(null);
   const [planHash, setPlanHash] = useState<string | null>(null);
   const [stratBrainCid, setStratBrainCid] = useState<string | null>(null);
+  const [alternatePlans, setAlternatePlans] = useState<StrategyPlan[]>([]);
   const [status, setStatus] = useState<'idle' | 'starting' | 'running' | 'awaiting_approval' | 'executed' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [agentDetail, setAgentDetail] = useState<AgentId | null>(null);
@@ -107,6 +108,7 @@ export default function RunPage() {
       setPlan(runData.plan);
       setPlanHash(runData.planHash ?? null);
       setStratBrainCid(runData.stratBrainCid ?? null);
+      setAlternatePlans(runData.alternatePlans ?? []);
       const sessionRes = await fetch(`/api/session/${data.sessionId}`);
       const sessionData = await sessionRes.json();
       setSessionState((s) => ({ ...s, ...sessionData }));
@@ -135,33 +137,42 @@ export default function RunPage() {
         const sessionData = await sessionRes.json();
         setSessionState((s) => ({ ...s, htsTxId: sessionData.htsTxId, lastHcsTxId: sessionData.lastHcsTxId, signature, signerAddress, approvedPlanHash: hashToStore }));
         setStatus('executed');
-        try {
-          const record = { id: sessionId, timestamp: new Date().toISOString(), goal, recommendation: planSnapshot.recommendation, riskScore: planSnapshot.riskScore, hcsTxId: sessionData.lastHcsTxId, htsTxId: sessionData.htsTxId, signerAddress };
-          const storageKey = address ? `aegisos-verifications-${address.toLowerCase()}` : 'aegisos-verifications';
-          const prev = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
-          localStorage.setItem(storageKey, JSON.stringify([record, ...prev].slice(0, 20)));
-        } catch {}
+        if (typeof window !== 'undefined' && window.localStorage) {
+          try {
+            const record = { id: sessionId, timestamp: new Date().toISOString(), goal, recommendation: planSnapshot.recommendation, riskScore: planSnapshot.riskScore, hcsTxId: sessionData.lastHcsTxId, htsTxId: sessionData.htsTxId, signerAddress };
+            const storageKey = address ? `aegisos-verifications-${address.toLowerCase()}` : 'aegisos-verifications';
+            const prev = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
+            const next = [record, ...prev].slice(0, 20);
+            localStorage.setItem(storageKey, JSON.stringify(next));
+            window.dispatchEvent(new CustomEvent('aegisos-verification-saved', { detail: { key: storageKey } }));
+          } catch (e) {
+            console.warn('Failed to save verification to localStorage:', e);
+          }
+        }
       } catch (e) { setError(String(e)); }
     },
     [sessionId, plan, planHash, goal, address]
   );
 
-  const handleReject = useCallback(async () => {
+  const handleReject = useCallback(() => {
     if (!sessionId) return;
-    await fetch(`/api/session/${sessionId}/reject`, { method: 'POST' });
-    setPlan(null); setPlanHash(null); setStatus('idle');
+    setPlan(null);
+    setPlanHash(null);
+    setAlternatePlans([]);
+    setStatus('idle');
+    fetch(`/api/session/${sessionId}/reject`, { method: 'POST' }).catch(() => {});
   }, [sessionId]);
 
   const signPlan = useCallback(async (hash: string) => {
     if (!walletClient || !address) throw new Error('Connect wallet to sign');
-    const BASE_CHAIN_ID = 8453;
-    if (chain?.id !== BASE_CHAIN_ID && switchChainAsync) await switchChainAsync({ chainId: BASE_CHAIN_ID });
+    const SIGN_CHAIN_ID = 84532; // Base Sepolia testnet
+    if (chain?.id !== SIGN_CHAIN_ID && switchChainAsync) await switchChainAsync({ chainId: SIGN_CHAIN_ID });
     return signApproval(walletClient, address, plan!.planId, hash);
   }, [walletClient, address, plan, chain?.id, switchChainAsync]);
 
   const resetSession = () => {
     setSessionId(null); setSessionState(null); setEvents([]); setPlan(null);
-    setPlanHash(null); setStratBrainCid(null); setStatus('idle'); setError(null);
+    setPlanHash(null); setStratBrainCid(null); setAlternatePlans([]); setStatus('idle'); setError(null);
   };
 
   const hasValidGoal = goal.trim().length > 0;
@@ -210,10 +221,11 @@ export default function RunPage() {
           <div className="space-y-5">
             <div>
               <label className="block text-[0.8125rem] font-medium text-zinc-400 mb-2">What do you want to achieve?</label>
+              <p className="text-[0.6875rem] text-zinc-500 mb-1.5">Describe in plain language — e.g. &quot;Saving for a house&quot;, &quot;Maximize yield&quot;, &quot;Protect my capital&quot;</p>
               <textarea
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
-                placeholder="e.g. Maximize yield while keeping risk low"
+                placeholder="e.g. Maximize yield while keeping risk low, or: I want to preserve my savings for retirement"
                 rows={4}
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-[0.9375rem] text-zinc-100 placeholder-zinc-500 outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/50 resize-none transition-colors"
               />
@@ -335,7 +347,7 @@ export default function RunPage() {
       )}
 
       {plan && planHash && (
-        <ApprovalModal plan={plan} planHash={planHash} onApprove={handleApprove} onReject={handleReject} signPlan={signPlan} isWalletConnected={!!(walletClient && address)} />
+        <ApprovalModal plan={plan} planHash={planHash} alternatePlans={alternatePlans} onApprove={handleApprove} onReject={handleReject} signPlan={signPlan} isWalletConnected={!!(walletClient && address)} />
       )}
       <AgentDetailModal agentId={agentDetail} onClose={() => setAgentDetail(null)} />
 

@@ -1,10 +1,28 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Plus, Wallet, RefreshCw, ChevronDown } from 'lucide-react';
 import { useBalance } from 'wagmi';
 import { formatUnits } from 'viem';
+import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import type { Holding } from '@aegisos/shared';
+
+const SOLANA_DEVNET_RPC = 'https://api.devnet.solana.com';
+
+// Chain IDs we fetch balances for (mainnet + testnet)
+const BALANCE_CHAINS = [
+  { chainId: 1, symbol: 'ETH', name: 'Ethereum' },
+  { chainId: 8453, symbol: 'ETH', name: 'Base' },
+  { chainId: 137, symbol: 'MATIC', name: 'Polygon' },
+  { chainId: 42161, symbol: 'ETH', name: 'Arbitrum' },
+  { chainId: 10, symbol: 'ETH', name: 'Optimism' },
+  { chainId: 11155111, symbol: 'ETH', name: 'Sepolia' },
+  { chainId: 84532, symbol: 'ETH', name: 'Base Sepolia' },
+  { chainId: 421614, symbol: 'ETH', name: 'Arbitrum Sepolia' },
+  { chainId: 11155420, symbol: 'ETH', name: 'OP Sepolia' },
+  { chainId: 80002, symbol: 'POL', name: 'Polygon Amoy' },
+  { chainId: 296, symbol: 'HBAR', name: 'Hedera Testnet' },
+];
 
 const CRYPTO_LIST = [
   { symbol: 'BTC',  name: 'Bitcoin' },
@@ -21,6 +39,7 @@ const CRYPTO_LIST = [
   { symbol: 'SHIB', name: 'Shiba Inu' },
   { symbol: 'DOT',  name: 'Polkadot' },
   { symbol: 'MATIC', name: 'Polygon' },
+  { symbol: 'POL', name: 'Polygon (POL)' },
   { symbol: 'LINK', name: 'Chainlink' },
   { symbol: 'UNI',  name: 'Uniswap' },
   { symbol: 'NEAR', name: 'NEAR Protocol' },
@@ -51,9 +70,10 @@ interface CryptoSelectProps {
   onPriceKnown?: (symbol: string, price: number) => void;
   disabled?: boolean;
   prices: Record<string, number>;
+  walletSymbols?: string[];
 }
 
-function CryptoSelect({ value, onChange, onPriceKnown, disabled, prices }: CryptoSelectProps) {
+function CryptoSelect({ value, onChange, onPriceKnown, disabled, prices, walletSymbols = [] }: CryptoSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const [dropdownPrices, setDropdownPrices] = useState<Record<string, number>>({});
@@ -63,7 +83,13 @@ function CryptoSelect({ value, onChange, onPriceKnown, disabled, prices }: Crypt
   useEffect(() => { setQuery(value); }, [value]);
   useEffect(() => { setDropdownPrices(prev => ({ ...prev, ...prices })); }, [prices]);
 
-  const filtered = CRYPTO_LIST.filter(
+  const fullList = useMemo(() => {
+    const seen = new Set(CRYPTO_LIST.map((c) => c.symbol));
+    const extra = walletSymbols.filter((s) => s && !seen.has(s)).map((symbol) => ({ symbol, name: symbol }));
+    return [...CRYPTO_LIST, ...extra];
+  }, [walletSymbols]);
+
+  const filtered = fullList.filter(
     (c) =>
       c.symbol.toLowerCase().includes(query.toLowerCase()) ||
       c.name.toLowerCase().includes(query.toLowerCase())
@@ -162,12 +188,139 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
   const lastSymbolKey = useRef<string>('');
   const autoImportedFor = useRef<string | null>(null);
   const [walletChecked, setWalletChecked] = useState(false);
+  const [solanaBalance, setSolanaBalance] = useState<number | null>(null);
+  const [solanaLoading, setSolanaLoading] = useState(false);
+  const [erc20Tokens, setErc20Tokens] = useState<Array<{ symbol: string; amount: number; decimals: number }>>([]);
+  const [erc20Loading, setErc20Loading] = useState(false);
+  const [solanaSplTokens, setSolanaSplTokens] = useState<Array<{ symbol: string; amount: number }>>([]);
+  const [solanaSplLoading, setSolanaSplLoading] = useState(false);
   const holdingsRef = useRef(holdings);
   const onChangeRef = useRef(onChange);
   useEffect(() => { holdingsRef.current = holdings; }, [holdings]);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-  const { data: balance } = useBalance({ address: walletAddress });
+  // Fetch all ERC-20 token balances (Blockscout, no API key)
+  useEffect(() => {
+    if (!walletAddress) {
+      setErc20Tokens([]);
+      return;
+    }
+    setErc20Loading(true);
+    const chainIds = BALANCE_CHAINS.map((c) => c.chainId).filter((id) => [1, 11155111, 8453, 84532, 137, 42161, 421614, 10, 11155420].includes(id));
+    fetch(`/api/token-balances?address=${walletAddress}&chainIds=${chainIds.join(',')}`)
+      .then((r) => r.json())
+      .then(({ tokens }: { tokens: Array<{ symbol: string; amount: number; decimals: number }> }) => {
+        setErc20Tokens(tokens ?? []);
+      })
+      .catch(() => setErc20Tokens([]))
+      .finally(() => setErc20Loading(false));
+  }, [walletAddress]);
+
+  // Fetch Solana Devnet balance when Phantom is available
+  useEffect(() => {
+    if (!walletAddress || typeof window === 'undefined') {
+      setSolanaBalance(null);
+      setSolanaSplTokens([]);
+      setSolanaSplLoading(false);
+      return;
+    }
+    const phantom = (window as unknown as { phantom?: { solana?: { connect(): Promise<{ publicKey: { toBase58(): string } }>; isConnected?: boolean; publicKey?: { toBase58(): string } } } }).phantom?.solana;
+    if (!phantom) {
+      setSolanaBalance(null);
+      setSolanaSplTokens([]);
+      setSolanaSplLoading(false);
+      return;
+    }
+    setSolanaLoading(true);
+    const run = async () => {
+      try {
+        let pubkey = phantom.publicKey;
+        if (!pubkey || !phantom.isConnected) {
+          const res = await phantom.connect();
+          pubkey = res.publicKey;
+        }
+        if (!pubkey) {
+          setSolanaBalance(0);
+          return;
+        }
+        const conn = new Connection(SOLANA_DEVNET_RPC);
+        const lamports = await conn.getBalance(new PublicKey(pubkey.toBase58()));
+        setSolanaBalance(lamports / LAMPORTS_PER_SOL);
+        // Fetch SPL token balances
+        setSolanaSplLoading(true);
+        fetch(`/api/solana-token-balances?pubkey=${encodeURIComponent(pubkey.toBase58())}`)
+          .then((r) => r.json())
+          .then(({ tokens }: { tokens: Array<{ symbol: string; amount: number }> }) => {
+            setSolanaSplTokens(tokens ?? []);
+          })
+          .catch(() => setSolanaSplTokens([]))
+          .finally(() => setSolanaSplLoading(false));
+      } catch {
+        setSolanaBalance(null);
+        setSolanaSplTokens([]);
+      } finally {
+        setSolanaLoading(false);
+      }
+    };
+    run();
+  }, [walletAddress]);
+
+  // Fetch native token balance from all supported chains (mainnet + testnet)
+  const b1 = useBalance({ address: walletAddress, chainId: 1 });
+  const b2 = useBalance({ address: walletAddress, chainId: 8453 });
+  const b3 = useBalance({ address: walletAddress, chainId: 137 });
+  const b4 = useBalance({ address: walletAddress, chainId: 42161 });
+  const b5 = useBalance({ address: walletAddress, chainId: 10 });
+  const b6 = useBalance({ address: walletAddress, chainId: 11155111 });
+  const b7 = useBalance({ address: walletAddress, chainId: 84532 });
+  const b8 = useBalance({ address: walletAddress, chainId: 421614 });
+  const b9 = useBalance({ address: walletAddress, chainId: 11155420 });
+  const b10 = useBalance({ address: walletAddress, chainId: 80002 });
+  const b11 = useBalance({ address: walletAddress, chainId: 296 });
+
+  const balances = useMemo(
+    () => [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11],
+    [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11]
+  );
+
+  // Aggregate by symbol: { ETH: totalAmount, MATIC: totalAmount, SOL: ... }
+  const aggregatedBySymbol = useMemo(() => {
+    const map: Record<string, { amount: number; decimals: number; symbol: string }> = {};
+    balances.forEach(({ data }, i) => {
+      const chain = BALANCE_CHAINS[i];
+      if (!data || !chain) return;
+      const amount = parseFloat(formatUnits(data.value, data.decimals));
+      if (amount <= 0) return;
+      const sym = chain.symbol;
+      if (!map[sym]) map[sym] = { amount: 0, decimals: data.decimals, symbol: data.symbol ?? sym };
+      map[sym].amount += amount;
+    });
+    // Include Solana Devnet SOL
+    if (solanaBalance != null && solanaBalance > 0) {
+      const sym = 'SOL';
+      if (!map[sym]) map[sym] = { amount: 0, decimals: 9, symbol: sym };
+      map[sym].amount += solanaBalance;
+    }
+    // Include ERC-20 tokens (aggregate by symbol)
+    for (const t of erc20Tokens) {
+      const sym = t.symbol?.toUpperCase();
+      if (!sym) continue;
+      if (!map[sym]) map[sym] = { amount: 0, decimals: t.decimals, symbol: sym };
+      map[sym].amount += t.amount;
+    }
+    // Include Solana SPL tokens
+    for (const t of solanaSplTokens) {
+      const sym = t.symbol?.toUpperCase();
+      if (!sym) continue;
+      if (!map[sym]) map[sym] = { amount: 0, decimals: 9, symbol: sym };
+      map[sym].amount += t.amount;
+    }
+    return map;
+  }, [balances, solanaBalance, erc20Tokens, solanaSplTokens]);
+
+  const hasAnyBalance = Object.values(aggregatedBySymbol).some((v) => v.amount > 0);
+  const allBalancesLoaded =
+    balances.every((b) => !b.isFetching) && !solanaLoading && !erc20Loading && !solanaSplLoading;
 
   const applyPrices = useCallback(
     (p: Record<string, number>) => {
@@ -218,57 +371,68 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
     return () => clearInterval(id);
   }, [fetchPrices]);
 
-  // Auto-import ETH balance when wallet first connects
+  // Auto-import balances when wallet first connects (native + ERC-20 + Solana tokens)
   useEffect(() => {
     if (!walletAddress || disabled) return;
     if (autoImportedFor.current === walletAddress) return;
-    if (balance !== undefined) {
-      autoImportedFor.current = walletAddress;
-      setWalletChecked(true);
-      const amt = parseFloat(formatUnits(balance.value, balance.decimals));
-      if (amt <= 0) return;
-      const isEmpty = !holdings.some((h) => h.symbol?.trim() && (h.amount > 0 || (h.valueUsd ?? 0) > 0));
-      if (!isEmpty) return;
-      setImporting(true);
-      fetch('/api/eth-price')
-        .then((r) => r.json())
-        .then(({ ethUsd }: { ethUsd: number }) => {
-          const amount = parseFloat(formatUnits(balance.value, balance.decimals));
-          const valueUsd = ethUsd > 0 ? amount * ethUsd : 0;
-          const symbol = balance.symbol || 'ETH';
-          if (ethUsd > 0) setPrices((prev) => ({ ...prev, [symbol.toUpperCase()]: ethUsd }));
-          const existing = holdings.find((h) => h.symbol?.toUpperCase() === symbol.toUpperCase());
-          if (existing) {
-            onChange(holdings.map((h) => h.symbol?.toUpperCase() === symbol.toUpperCase() ? { ...h, amount, valueUsd: valueUsd || h.valueUsd } : h));
-          } else {
-            onChange([...holdings.filter((h) => h.symbol && (h.amount > 0 || (h.valueUsd ?? 0) > 0)), { symbol, amount, valueUsd }]);
-          }
-        })
-        .finally(() => setImporting(false));
-    }
+    if (!allBalancesLoaded) return;
+    autoImportedFor.current = walletAddress;
+    setWalletChecked(true);
+    if (!hasAnyBalance) return;
+    const isEmpty = !holdings.some((h) => h.symbol?.trim() && (h.amount > 0 || (h.valueUsd ?? 0) > 0));
+    if (!isEmpty) return;
+    setImporting(true);
+    const symbols = Object.keys(aggregatedBySymbol);
+    fetch(`/api/prices?symbols=${symbols.join(',')}`)
+      .then((r) => r.json())
+      .then(({ prices: p }: { prices: Record<string, number> }) => {
+        const newHoldings: Holding[] = [];
+        for (const [sym, { amount }] of Object.entries(aggregatedBySymbol)) {
+          const price = p[sym?.toUpperCase() ?? ''];
+          const valueUsd = price && price > 0 ? amount * price : 0;
+          if (price && price > 0) setPrices((prev) => ({ ...prev, [sym.toUpperCase()]: price }));
+          newHoldings.push({ symbol: sym, amount, valueUsd });
+        }
+        onChange(newHoldings);
+      })
+      .catch(() => {
+        const newHoldings: Holding[] = Object.entries(aggregatedBySymbol).map(([sym, { amount }]) => ({
+          symbol: sym,
+          amount,
+          valueUsd: 0,
+        }));
+        onChange(newHoldings);
+      })
+      .finally(() => setImporting(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress, balance?.value, balance, disabled]);
+  }, [walletAddress, allBalancesLoaded, hasAnyBalance, disabled]);
 
   useEffect(() => {
     if (!walletAddress) { setWalletChecked(false); autoImportedFor.current = null; }
   }, [walletAddress]);
 
   const importFromWallet = async () => {
-    if (!walletAddress || !balance) return;
+    if (!walletAddress || !hasAnyBalance) return;
     setImporting(true);
     try {
-      const res = await fetch('/api/eth-price');
-      const { ethUsd } = (await res.json()) as { ethUsd: number };
-      const amount = parseFloat(formatUnits(balance.value, balance.decimals));
-      const valueUsd = ethUsd > 0 ? amount * ethUsd : 0;
-      const symbol = balance.symbol || 'ETH';
-      if (ethUsd > 0) setPrices((prev) => ({ ...prev, [symbol.toUpperCase()]: ethUsd }));
-      const existing = holdings.find((h) => h.symbol.toUpperCase() === symbol.toUpperCase());
-      if (existing) {
-        onChange(holdings.map((h) => h.symbol.toUpperCase() === symbol.toUpperCase() ? { ...h, amount, valueUsd: valueUsd || h.valueUsd } : h));
-      } else {
-        onChange([...holdings.filter((h) => h.symbol && (h.amount > 0 || (h.valueUsd ?? 0) > 0)), { symbol, amount, valueUsd }]);
+      const symbols = Object.keys(aggregatedBySymbol);
+      const res = await fetch(`/api/prices?symbols=${symbols.join(',')}`);
+      const { prices: p } = (await res.json()) as { prices: Record<string, number> };
+      const newHoldings: Holding[] = [];
+      for (const [sym, { amount }] of Object.entries(aggregatedBySymbol)) {
+        const price = p[sym?.toUpperCase() ?? ''];
+        const valueUsd = price && price > 0 ? amount * price : 0;
+        if (price && price > 0) setPrices((prev) => ({ ...prev, [sym.toUpperCase()]: price }));
+        newHoldings.push({ symbol: sym, amount, valueUsd });
       }
+      onChange(newHoldings);
+    } catch {
+      const newHoldings: Holding[] = Object.entries(aggregatedBySymbol).map(([sym, { amount }]) => ({
+        symbol: sym,
+        amount,
+        valueUsd: 0,
+      }));
+      onChange(newHoldings);
     } finally {
       setImporting(false);
     }
@@ -310,10 +474,9 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
 
   const removeRow = (i: number) => onChange(holdings.filter((_, j) => j !== i));
 
-  const canImport = walletAddress && balance && parseFloat(formatUnits(balance.value, balance.decimals)) > 0 && !disabled;
+  const canImport = walletAddress && hasAnyBalance && !disabled;
   const walletHasNoHoldings =
-    walletAddress && walletChecked && balance !== undefined &&
-    parseFloat(formatUnits(balance.value, balance.decimals)) <= 0 && holdings.length === 0;
+    walletAddress && walletChecked && allBalancesLoaded && !hasAnyBalance && holdings.length === 0;
 
   return (
     <div className="space-y-2">
@@ -332,8 +495,8 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
               {importing ? 'Importing...' : 'Refresh from wallet'}
             </button>
           )}
-          {walletAddress && !canImport && !walletHasNoHoldings && (
-            <button type="button" onClick={importFromWallet} disabled={importing || !balance}
+          {walletAddress && !canImport && !walletHasNoHoldings && allBalancesLoaded && (
+            <button type="button" onClick={importFromWallet} disabled={importing}
               className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors">
               <Wallet className="h-4 w-4" />
               {importing ? 'Importing...' : 'Import from wallet'}
@@ -347,11 +510,17 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
         </div>
       </div>
 
-      {walletHasNoHoldings ? (
-        <div className="rounded-md border border-zinc-800 bg-zinc-950 px-4 py-6 text-center">
+      {walletAddress && !allBalancesLoaded ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-6 text-center">
+          <RefreshCw className="h-8 w-8 text-zinc-500 mx-auto mb-2 animate-spin" />
+          <p className="text-sm font-medium text-zinc-400">Checking balances across chains…</p>
+          <p className="text-xs text-zinc-600 mt-1">Native + ERC-20 tokens + Solana SPL across all chains</p>
+        </div>
+      ) : walletHasNoHoldings ? (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-4 py-6 text-center">
           <Wallet className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
-          <p className="text-sm font-medium text-zinc-400">This account has no holdings</p>
-          <p className="text-xs text-zinc-600 mt-1">Add a holding manually or connect a wallet with a balance.</p>
+          <p className="text-sm font-medium text-zinc-400">No native balance found</p>
+          <p className="text-xs text-zinc-600 mt-1">No ETH, MATIC, POL, HBAR, etc. on supported chains. Add holdings manually.</p>
           <button type="button" onClick={addRow} disabled={disabled}
             className="mt-3 flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50 transition-colors mx-auto">
             <Plus className="h-4 w-4" />
@@ -376,7 +545,7 @@ export function HoldingsInput({ holdings, onChange, disabled, walletAddress }: H
                 return (
                   <tr key={i} className="border-t border-zinc-800">
                     <td className="px-4 py-2.5 overflow-visible align-top">
-                      <CryptoSelect value={h.symbol} onChange={(s) => updateSymbol(i, s)} onPriceKnown={(sym, p) => updateSymbol(i, sym, p)} disabled={disabled} prices={prices} />
+                      <CryptoSelect value={h.symbol} onChange={(s) => updateSymbol(i, s)} onPriceKnown={(sym, p) => updateSymbol(i, sym, p)} disabled={disabled} prices={prices} walletSymbols={Object.keys(aggregatedBySymbol)} />
                     </td>
                     <td className="px-4 py-2.5 align-top">
                       <input type="number" value={h.amount || ''} onChange={(e) => updateRow(i, 'amount', e.target.value)}

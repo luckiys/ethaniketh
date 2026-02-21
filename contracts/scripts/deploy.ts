@@ -46,6 +46,20 @@ async function main() {
   console.log('  Contract address:', address);
   console.log('  HashScan:        https://hashscan.io/testnet/contract/' + address);
 
+  // Fund contract with 0.01 HBAR for scheduleHbarRebalance (no HTS token needed)
+  const fundAmount = ethers.parseEther('0.01');
+  if (balance >= fundAmount) {
+    console.log('\nFunding contract with 0.01 HBAR for HBAR scheduling...');
+    const fundTx = await deployer.sendTransaction({
+      to: address,
+      value: fundAmount,
+    });
+    await fundTx.wait();
+    console.log('  ✓ Contract funded');
+  } else {
+    console.log('\n⚠ Skipping contract fund (low balance). Send 0.01 HBAR to', address, 'for scheduleHbarRebalance.');
+  }
+
   console.log('\nAdd this to frontend/.env.local:');
   console.log(`  AEGIS_SCHEDULER_ADDRESS=${address}`);
 

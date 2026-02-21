@@ -14,6 +14,9 @@ const ZEROG_INDEXER_RPC = 'https://indexer-storage-testnet-turbo.0g.ai';
  *
  * With no ZEROG_PRIVATE_KEY the function returns a deterministic SHA-256
  * derived mock CID so everything downstream works identically.
+ *
+ * 0g Labs DeFAI bounty: 0G Storage provides decentralized audit trail for
+ * strategy plans, risk reports, and execution records.
  */
 export async function uploadToZeroG(data: object): Promise<string> {
   const privateKey = process.env.ZEROG_PRIVATE_KEY;
@@ -64,4 +67,25 @@ export async function uploadToZeroG(data: object): Promise<string> {
       unlinkSync(tmpPath);
     } catch {}
   }
+}
+
+/**
+ * Stores an approved + executed plan to 0G for decentralized audit trail.
+ * Used for 0g Labs DeFAI bounty — 0G Storage holds immutable record of
+ * every approved strategy and its execution outcome.
+ */
+export async function storeExecutedPlanToZeroG(payload: {
+  planId: string;
+  planHash: string;
+  actions: unknown[];
+  htsTxId: string;
+  steps: string[];
+  executedAt: string;
+}): Promise<string> {
+  const record = {
+    schema: 'aegisos-executed-plan-v1',
+    ...payload,
+    storageNetwork: '0g-testnet',
+  };
+  return uploadToZeroG(record);
 }

@@ -36,6 +36,7 @@ Portfolio context:
 - Top holdings: ${topPositions.map(p => `${p.symbol} (${p.weight.toFixed(1)}%)`).join(', ')}
 - Market regime: ${marketRegime}
 - Fear & Greed index: ${marketData?.fearGreedIndex ?? 'N/A'} (${marketData?.fearGreedLabel ?? 'N/A'})
+- Funding rate (BTC/ETH avg): ${marketData?.fundingRateAvg != null ? (marketData.fundingRateAvg * 100).toFixed(4) + '%' : 'N/A'}
 - 24h avg volatility: ${marketData?.avgVolatility24h.toFixed(1) ?? 'N/A'}%
 - Avg drawdown from ATH: ${marketData?.avgAthDrawdown.toFixed(1) ?? 'N/A'}%
 
@@ -99,67 +100,41 @@ async function generateLLMReasoning(
 
 // ---------------------------------------------------------------------------
 // Goal profile — parsed from free-text goal, controls risk weights + thresholds
+// Uses LLM (Gemini) when available for natural-language understanding; regex fallback otherwise.
 // ---------------------------------------------------------------------------
 
-function parseGoalProfile(goal: string): GoalProfile {
-  const g = goal.toLowerCase();
-
-  const isConservative =
-    /conservat|safe|protect|preserv|stable|low.?risk|minimal.?risk|capital.?preserv|cautious|slow|steady/.test(g);
-  const isAggressive =
-    /aggress|maximiz|max.?(yield|return|profit)|high.?risk|bold|growth|moon|ape|degen|all.?in/.test(g);
-  const isYield =
-    /yield|income|dividend|staking|earn|passive|cash.?flow|interest/.test(g);
-
-  if (isConservative) {
-    return {
-      label: 'conservative',
-      // Conservative: concentration and volatility matter most — punish both hard
-      wConcentration: 0.35,
-      wVolatility: 0.30,
-      wSentiment: 0.15,
-      wLiquidity: 0.12,
-      wDrawdown: 0.08,
-      // Tighter thresholds — trigger warnings sooner
-      reduceRiskAt: 55,
-      rebalanceAt: 35,
-      goalSummary: 'capital preservation / low risk',
-    };
-  }
-
-  if (isAggressive) {
-    return {
-      label: 'aggressive',
-      // Aggressive: concentration is fine, focus more on liquidity and market timing (drawdown/sentiment)
-      wConcentration: 0.10,
-      wVolatility: 0.20,
-      wSentiment: 0.25,
-      wLiquidity: 0.20,
-      wDrawdown: 0.25,
-      // Wider thresholds — only flag extreme risk
-      reduceRiskAt: 82,
-      rebalanceAt: 65,
-      goalSummary: 'aggressive growth / high risk tolerance',
-    };
-  }
-
-  if (isYield) {
-    return {
-      label: 'yield',
-      // Yield: liquidity and sentiment matter most (can't earn yield on illiquid or panic-sold positions)
-      wConcentration: 0.20,
-      wVolatility: 0.15,
-      wSentiment: 0.25,
-      wLiquidity: 0.25,
-      wDrawdown: 0.15,
-      reduceRiskAt: 68,
-      rebalanceAt: 45,
-      goalSummary: 'yield / passive income',
-    };
-  }
-
-  // Balanced (default)
-  return {
+const PROFILE_CONFIGS: Record<GoalProfile['label'], Omit<GoalProfile, 'goalSummary'>> = {
+  conservative: {
+    label: 'conservative',
+    wConcentration: 0.35,
+    wVolatility: 0.30,
+    wSentiment: 0.15,
+    wLiquidity: 0.12,
+    wDrawdown: 0.08,
+    reduceRiskAt: 55,
+    rebalanceAt: 35,
+  },
+  aggressive: {
+    label: 'aggressive',
+    wConcentration: 0.10,
+    wVolatility: 0.20,
+    wSentiment: 0.25,
+    wLiquidity: 0.20,
+    wDrawdown: 0.25,
+    reduceRiskAt: 82,
+    rebalanceAt: 65,
+  },
+  yield: {
+    label: 'yield',
+    wConcentration: 0.20,
+    wVolatility: 0.15,
+    wSentiment: 0.25,
+    wLiquidity: 0.25,
+    wDrawdown: 0.15,
+    reduceRiskAt: 68,
+    rebalanceAt: 45,
+  },
+  balanced: {
     label: 'balanced',
     wConcentration: 0.25,
     wVolatility: 0.25,
@@ -168,8 +143,74 @@ function parseGoalProfile(goal: string): GoalProfile {
     wDrawdown: 0.15,
     reduceRiskAt: 70,
     rebalanceAt: 45,
-    goalSummary: 'balanced growth / moderate risk',
-  };
+  },
+};
+
+const DEFAULT_SUMMARIES: Record<GoalProfile['label'], string> = {
+  conservative: 'capital preservation / low risk',
+  aggressive: 'aggressive growth / high risk tolerance',
+  yield: 'yield / passive income',
+  balanced: 'balanced growth / moderate risk',
+};
+
+/** LLM-based goal interpretation — understands natural language like "saving for a house" or "I want passive income" */
+async function interpretGoalWithLLM(goal: string): Promise<{ label: GoalProfile['label']; goalSummary: string } | null> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) return null;
+
+  try {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const prompt = `You are a DeFi portfolio advisor. A user described their investment goal in plain language. Classify it into exactly one of: conservative, balanced, aggressive, yield.
+
+User goal: "${goal}"
+
+Rules:
+- conservative: capital preservation, safety, low risk, protecting savings, retirement, house down payment, cautious
+- aggressive: maximize returns, high risk tolerance, growth, "moon", degen, all-in, bold bets
+- yield: passive income, staking, dividends, earning interest, cash flow, DCA into yield
+- balanced: moderate risk, mix of growth and safety, no strong preference
+
+Respond with ONLY a JSON object, no other text: {"label":"conservative|balanced|aggressive|yield","goalSummary":"one short phrase summarizing their goal"}
+Example: {"label":"conservative","goalSummary":"saving for house down payment in 2 years"}`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const json = text.replace(/```json?\s*|\s*```/g, '').trim();
+    const parsed = JSON.parse(json) as { label?: string; goalSummary?: string };
+    const label = parsed?.label as GoalProfile['label'] | undefined;
+    if (label && ['conservative', 'balanced', 'aggressive', 'yield'].includes(label)) {
+      return {
+        label,
+        goalSummary: parsed.goalSummary?.trim() || DEFAULT_SUMMARIES[label],
+      };
+    }
+  } catch {
+    // Fall through to regex
+  }
+  return null;
+}
+
+function parseGoalProfileRegex(goal: string): GoalProfile['label'] {
+  const g = goal.toLowerCase();
+  if (/conservat|safe|protect|preserv|stable|low.?risk|minimal.?risk|capital.?preserv|cautious|slow|steady|retirement|house|college|savings/.test(g)) return 'conservative';
+  if (/aggress|maximiz|max.?(yield|return|profit)|high.?risk|bold|growth|moon|ape|degen|all.?in/.test(g)) return 'aggressive';
+  if (/yield|income|dividend|staking|earn|passive|cash.?flow|interest/.test(g)) return 'yield';
+  return 'balanced';
+}
+
+async function parseGoalProfile(goal: string): Promise<GoalProfile> {
+  // Try LLM first for natural-language understanding
+  const llmResult = await interpretGoalWithLLM(goal);
+  if (llmResult) {
+    const config = PROFILE_CONFIGS[llmResult.label];
+    return { ...config, goalSummary: llmResult.goalSummary };
+  }
+
+  // Fallback: regex-based parsing
+  const label = parseGoalProfileRegex(goal);
+  const config = PROFILE_CONFIGS[label];
+  return { ...config, goalSummary: DEFAULT_SUMMARIES[label] };
 }
 
 // ---------------------------------------------------------------------------
@@ -205,13 +246,19 @@ function liquidityScore(avgLiquidityRatio: number): number {
 }
 
 /**
- * Sentiment risk from Fear & Greed index.
+ * Sentiment risk from Fear & Greed index + funding rates.
  * Contrarian: extreme fear AND extreme greed both = higher risk.
+ * Funding >0.1% = euphoric leverage (liquidation cascade risk); <-0.05% = fear/short squeeze.
  * Neutral (50) = minimum risk.
- * Formula: 20 + 60 × |fgi − 50| / 50
  */
-function sentimentScore(fearGreedIndex: number): number {
-  return Math.min(100, Math.round(20 + 60 * (Math.abs(fearGreedIndex - 50) / 50)));
+function sentimentScore(fearGreedIndex: number, fundingRateAvg?: number): number {
+  let s = Math.min(100, Math.round(20 + 60 * (Math.abs(fearGreedIndex - 50) / 50)));
+  if (fundingRateAvg != null) {
+    const fundingPct = fundingRateAvg * 100;
+    if (fundingPct > 0.1) s = Math.min(100, s + 15); // euphoria
+    else if (fundingPct < -0.05) s = Math.min(100, s + 10); // fear/short squeeze
+  }
+  return s;
 }
 
 /**
@@ -231,28 +278,65 @@ function drawdownScore(avgAthDrawdown: number): number {
 // Main strategist
 // ---------------------------------------------------------------------------
 
-export async function runStrategist(signal: WatchSignal, goal: string, riskPreference?: number): Promise<StrategyPlan> {
+async function fetchPortfolioOptimization(
+  holdings: Array<{ symbol: string; amount: number; valueUsd?: number }>,
+  riskPreference?: number
+): Promise<{ suggested_action?: string; drift_pct?: number } | null> {
+  const url = process.env.PORTFOLIO_SERVICE_URL || 'http://localhost:5002';
+  try {
+    const riskTolerance = riskPreference != null ? riskPreference / 100 : 0.5;
+    const res = await fetch(`${url}/optimize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        holdings: holdings.filter((h) => (h.valueUsd ?? 0) > 0),
+        risk_tolerance: riskTolerance,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { suggested_action?: string; drift_pct?: number };
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export type StrategistResult = { plan: StrategyPlan; alternatePlans: StrategyPlan[] };
+
+export async function runStrategist(signal: WatchSignal, goal: string, riskPreference?: number): Promise<StrategistResult> {
   const planId = randomUUID();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   const { portfolioValue, marketRegime, topPositions, alerts, marketData } = signal;
   const maxWeight = topPositions[0]?.weight ?? 0;
 
-  // Parse goal to determine profile (weights + thresholds)
-  const profile = parseGoalProfile(goal);
+  // Parse goal to determine profile (weights + thresholds) — LLM when available, regex fallback
+  const profile = await parseGoalProfile(goal);
 
   // --- Compute 5 risk components (each 0–100) ---
   const C = concentrationScore(topPositions);
 
-  const V = marketData
+  let V = marketData
     ? volatilityScore(marketData.avgVolatility24h)
     : volatilityScore(marketRegime === 'volatile' ? 12 : marketRegime === 'bear' ? 7 : 3);
+  if (marketData?.var95 != null && marketData.var95 > 5) {
+    V = Math.min(100, V + Math.round((marketData.var95 - 5) * 2));
+  }
 
   const L = marketData ? liquidityScore(marketData.avgLiquidityRatio) : 30;
 
-  const S = marketData ? sentimentScore(marketData.fearGreedIndex) : sentimentScore(50);
+  const S = marketData ? sentimentScore(marketData.fearGreedIndex, marketData.fundingRateAvg) : sentimentScore(50);
 
   const D = marketData ? drawdownScore(marketData.avgAthDrawdown) : 40;
+
+  let protocolRisk = 0;
+  if (marketData?.protocolRiskScore != null && marketData.protocolRiskScore > 60) {
+    protocolRisk = Math.min(20, marketData.protocolRiskScore - 60);
+  }
+  if (marketData?.macroRegime === 'risk-off') {
+    protocolRisk += 10;
+  }
 
   // Weighted risk score using goal-driven weights
   const riskScore = Math.min(
@@ -262,7 +346,8 @@ export async function runStrategist(signal: WatchSignal, goal: string, riskPrefe
       V * profile.wVolatility +
       S * profile.wSentiment +
       L * profile.wLiquidity +
-      D * profile.wDrawdown
+      D * profile.wDrawdown +
+      protocolRisk
     )
   );
 
@@ -284,25 +369,69 @@ export async function runStrategist(signal: WatchSignal, goal: string, riskPrefe
   }
 
   // --- Recommendation — thresholds depend on goal profile ---
-  let recommendation: StrategyPlan['recommendation'] = 'HOLD';
+  let baseRecommendation: StrategyPlan['recommendation'] = 'HOLD';
+
+  const holdingsForOpt = topPositions.map((p) => ({
+    symbol: p.symbol,
+    amount: 0,
+    valueUsd: p.valueUsd,
+  }));
+  const portfolioOpt = portfolioValue > 0 ? await fetchPortfolioOptimization(holdingsForOpt, riskPreference) : null;
 
   if (portfolioValue === 0) {
-    recommendation = 'HOLD';
+    baseRecommendation = 'HOLD';
   } else if (riskScore >= profile.reduceRiskAt || alerts.length >= 3) {
-    recommendation = 'REDUCE_RISK';
+    baseRecommendation = 'REDUCE_RISK';
   } else if (riskScore >= profile.rebalanceAt || alerts.length >= 1) {
-    recommendation = 'REBALANCE';
+    baseRecommendation = 'REBALANCE';
+  } else if (portfolioOpt?.suggested_action === 'REBALANCE' && (portfolioOpt.drift_pct ?? 0) > 15) {
+    baseRecommendation = 'REBALANCE';
   } else if (marketRegime === 'bull' && riskScore < profile.rebalanceAt * 0.8) {
-    recommendation = 'INCREASE_EXPOSURE';
+    baseRecommendation = 'INCREASE_EXPOSURE';
   }
 
-  // --- Reasoning — LLM-generated if ANTHROPIC_API_KEY is set, otherwise template fallback ---
-  const fgStr = marketData
-    ? `${marketData.fearGreedLabel} (${marketData.fearGreedIndex}/100)`
-    : 'N/A';
+  const fgStr = marketData ? `${marketData.fearGreedLabel} (${marketData.fearGreedIndex}/100)` : 'N/A';
   const volStr = marketData ? `${marketData.avgVolatility24h.toFixed(1)}%` : 'N/A';
   const liqStr = marketData ? `${(marketData.avgLiquidityRatio * 100).toFixed(2)}%` : 'N/A';
   const athStr = marketData ? `${marketData.avgAthDrawdown.toFixed(1)}% from ATH` : 'N/A';
+
+  const goalContext = profile.label === 'conservative'
+    ? 'Given your capital-preservation goal'
+    : profile.label === 'aggressive'
+    ? 'Given your high-risk-tolerance goal'
+    : profile.label === 'yield'
+    ? 'Given your yield-focused goal'
+    : 'Given your balanced goal';
+
+  // Build multiple candidate plans with different reduction amounts; pick the one that fits user's risk band
+  const targetUserRisk = riskPreference ?? 50;
+  const candidates: Array<{ targetWeight: number; rec: StrategyPlan['recommendation']; projectedRisk: number }> = [];
+
+  if (portfolioValue === 0 || baseRecommendation === 'HOLD' || baseRecommendation === 'INCREASE_EXPOSURE') {
+    candidates.push({ targetWeight: maxWeight, rec: baseRecommendation, projectedRisk: riskScore });
+  } else if (topPositions.length > 0 && maxWeight > 40) {
+    // Variants: HOLD (no change), mild (50), moderate (40), aggressive (35) — pick one that fits user's risk band
+    const targets = [maxWeight, 50, 40, 35].filter((t) => t <= maxWeight);
+    const unique = [...new Set(targets)].sort((a, b) => b - a);
+    for (const targetWeight of unique) {
+      const rec = targetWeight >= 45 ? 'REBALANCE' : targetWeight >= 38 ? 'REBALANCE' : 'REDUCE_RISK';
+      const reduction = maxWeight - targetWeight;
+      const projectedRisk = Math.max(0, Math.min(100, riskScore - 0.35 * reduction));
+      candidates.push({ targetWeight, rec, projectedRisk });
+    }
+  } else {
+    candidates.push({ targetWeight: maxWeight, rec: baseRecommendation, projectedRisk: riskScore });
+  }
+
+  // Pick the candidate whose projected risk is closest to user's risk preference
+  const sorted = [...candidates].sort((a, b) =>
+    Math.abs(a.projectedRisk - targetUserRisk) - Math.abs(b.projectedRisk - targetUserRisk)
+  );
+  const chosen = sorted[0];
+  const alternates = sorted.slice(1);
+
+  const targetWeight = chosen.targetWeight;
+  const recommendation = chosen.rec;
 
   const templateReasoning = portfolioValue === 0
     ? 'Portfolio is empty. Add holdings to receive a strategy.'
@@ -330,15 +459,6 @@ export async function runStrategist(signal: WatchSignal, goal: string, riskPrefe
     }
   }
 
-  // --- Worst-case analysis — goal-aware language ---
-  const goalContext = profile.label === 'conservative'
-    ? 'Given your capital-preservation goal'
-    : profile.label === 'aggressive'
-    ? 'Given your high-risk-tolerance goal'
-    : profile.label === 'yield'
-    ? 'Given your yield-focused goal'
-    : 'Given your balanced goal';
-
   const worstCaseAnalysis = riskScore >= profile.reduceRiskAt
     ? `${goalContext}, risk score ${riskScore}/100 is above your threshold of ${profile.reduceRiskAt}. Concentration score ${C}/100 and volatility ${V}/100. In a sharp downturn, your top position (${topPositions[0]?.symbol ?? 'N/A'} at ${maxWeight.toFixed(1)}%) could drive significant portfolio losses. Reducing exposure is recommended.`
     : riskScore >= profile.rebalanceAt
@@ -347,16 +467,15 @@ export async function runStrategist(signal: WatchSignal, goal: string, riskPrefe
     ? `${goalContext}, risk is low-to-moderate (${riskScore}/100). Primary concern: ${C > 50 ? `concentration (${C}/100)` : V > 50 ? `volatility (${V}/100)` : `market sentiment (${S}/100)`}. No immediate action required.`
     : `${goalContext}, portfolio risk is low (${riskScore}/100). All components within acceptable range for your profile.`;
 
-  // --- Actions ---
   const actions: StrategyPlan['actions'] = [];
   if (
     (recommendation === 'REBALANCE' || recommendation === 'REDUCE_RISK') &&
     topPositions.length > 0 &&
-    maxWeight > 40
+    maxWeight > 40 &&
+    targetWeight < maxWeight - 2
   ) {
     const top = topPositions[0];
     if (top) {
-      const targetWeight = recommendation === 'REDUCE_RISK' ? 35 : 40;
       const excessUsd = Math.max(0, ((maxWeight - targetWeight) / 100) * portfolioValue);
       const pricePerToken = top.amount && top.amount > 0 ? top.valueUsd / top.amount : 0;
       let reduceAmount: string;
@@ -378,13 +497,88 @@ export async function runStrategist(signal: WatchSignal, goal: string, riskPrefe
     }
   }
 
-  return StrategyPlanSchema.parse({
+  // Structured context for LLM to explain our logic to beginners
+  const decisionContext = {
+    userGoal: goal,
+    goalSummary: profile.goalSummary,
+    goalProfile: profile.label,
+    portfolioValue,
+    topHoldings: topPositions.slice(0, 5).map((p) => ({ symbol: p.symbol, weight: p.weight, valueUsd: p.valueUsd })),
+    riskComponents: {
+      concentration: { score: C, meaning: C > 60 ? 'Most of your portfolio is in one asset' : C > 40 ? 'Portfolio is somewhat concentrated' : 'Well diversified' },
+      volatility: { score: V, meaning: V > 60 ? 'Prices have been swinging a lot' : V > 40 ? 'Moderate price movement' : 'Relatively stable' },
+      sentiment: { score: S, meaning: S > 60 ? 'Market mood is extreme (fear or greed)' : 'Market mood is moderate' },
+      liquidity: { score: L, meaning: L > 60 ? 'Harder to sell quickly' : 'Liquid enough to trade' },
+      drawdown: { score: D, meaning: D > 60 ? 'Near all-time highs (correction risk)' : 'Some cushion from peaks' },
+    },
+    overallRiskScore: riskScore,
+    projectedRiskAfterAction: Math.round(chosen.projectedRisk),
+    userRiskPreference: riskPreference ?? 50,
+    thresholds: { reduceRiskAt: profile.reduceRiskAt, rebalanceAt: profile.rebalanceAt },
+    whyThisRecommendation: portfolioValue === 0
+      ? 'Portfolio is empty'
+      : riskScore >= profile.reduceRiskAt || alerts.length >= 3
+      ? `Risk (${riskScore}) is above your comfort level (${profile.reduceRiskAt})`
+      : riskScore >= profile.rebalanceAt || alerts.length >= 1
+      ? `Moderate risk (${riskScore}) — rebalancing could help`
+      : marketRegime === 'bull' && riskScore < profile.rebalanceAt * 0.8
+      ? 'Bull market with room to grow'
+      : 'Risk is within your range — no action needed',
+    recommendation,
+    actions: actions.map((a) => ({ type: a.type, token: a.token, amount: a.amount })),
+    marketRegime,
+    fearGreed: marketData ? { index: marketData.fearGreedIndex, label: marketData.fearGreedLabel } : null,
+    alerts,
+    candidatesConsidered: candidates.length,
+    whyChoseThisPlan: `Picked the option whose risk after action (${Math.round(chosen.projectedRisk)}) is closest to your preference (${targetUserRisk})`,
+  };
+
+  const primaryPlan = StrategyPlanSchema.parse({
     planId,
     recommendation,
-    riskScore,
+    riskScore: Math.round(chosen.projectedRisk),
     worstCaseAnalysis,
     actions,
     reasoning,
     expiresAt,
+    decisionContext,
   });
+
+  // Build alternate plans (same structure, different target weights)
+  const alternatePlans: StrategyPlan[] = alternates.map((alt, i) => {
+    const altActions: StrategyPlan['actions'] = [];
+    if (
+      (alt.rec === 'REBALANCE' || alt.rec === 'REDUCE_RISK') &&
+      topPositions.length > 0 &&
+      maxWeight > 40 &&
+      alt.targetWeight < maxWeight - 2
+    ) {
+      const top = topPositions[0];
+      if (top) {
+        const excessUsd = Math.max(0, ((maxWeight - alt.targetWeight) / 100) * portfolioValue);
+        const pricePerToken = top.amount && top.amount > 0 ? top.valueUsd / top.amount : 0;
+        const reduceAmount = pricePerToken > 0
+          ? (excessUsd / pricePerToken).toFixed(4)
+          : top.amount ? (top.amount * (maxWeight - alt.targetWeight) / maxWeight).toFixed(4) : '0';
+        altActions.push({
+          type: 'TRANSFER',
+          from: 'portfolio',
+          to: 'stable',
+          amount: reduceAmount,
+          token: top.symbol,
+        });
+      }
+    }
+    return StrategyPlanSchema.parse({
+      planId: randomUUID(),
+      recommendation: alt.rec,
+      riskScore: Math.round(alt.projectedRisk),
+      worstCaseAnalysis,
+      actions: altActions,
+      reasoning: templateReasoning,
+      expiresAt,
+    });
+  });
+
+  return { plan: primaryPlan, alternatePlans };
 }

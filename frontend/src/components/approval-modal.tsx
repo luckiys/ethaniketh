@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ShieldCheck, X, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, X, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import type { StrategyPlan } from '@aegisos/shared';
 
 interface ApprovalModalProps {
   plan: StrategyPlan;
   planHash: string;
+  alternatePlans?: StrategyPlan[];
   onApprove: (signature: string, signerAddress: string, signatureTimestamp?: string) => void;
   onReject: () => void;
   disabled?: boolean;
@@ -44,6 +45,7 @@ function describeAction(a: StrategyPlan['actions'][number]): string {
 export function ApprovalModal({
   plan,
   planHash,
+  alternatePlans = [],
   onApprove,
   onReject,
   disabled,
@@ -53,23 +55,49 @@ export function ApprovalModal({
   const [status, setStatus] = useState<'idle' | 'signing' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [humanReasoning, setHumanReasoning] = useState<string | null>(null);
+  const [humanizing, setHumanizing] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState<'recommended' | 'alternates'>('recommended');
 
   const risk = riskMeta(plan.riskScore);
 
-  // Convert technical reasoning to human-readable text via Gemini (requires GEMINI_API_KEY)
+  // LLM explains our logic in beginner-friendly steps (uses actual decision context when available)
   useEffect(() => {
-    if (!plan.reasoning?.trim()) return;
+    const ctx = (plan as { decisionContext?: Record<string, unknown> }).decisionContext;
+    setHumanizing(true);
+
+    if (ctx && Object.keys(ctx).length > 0) {
+      fetch('/api/explain-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decisionContext: ctx }),
+      })
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data?.steps) setHumanReasoning(data.steps);
+        })
+        .catch(() => {})
+        .finally(() => setHumanizing(false));
+      return;
+    }
+
+    const combined = [plan.worstCaseAnalysis, plan.reasoning].filter(Boolean).join(' ').trim();
+    if (!combined) {
+      setHumanizing(false);
+      return;
+    }
     fetch('/api/humanize-reasoning', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reasoning: plan.reasoning }),
+      body: JSON.stringify({ reasoning: plan.reasoning, worstCaseAnalysis: plan.worstCaseAnalysis }),
     })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data?.humanized) setHumanReasoning(data.humanized);
       })
-      .catch(() => {});
-  }, [plan.reasoning]);
+      .catch(() => {})
+      .finally(() => setHumanizing(false));
+  }, [plan]);
 
   const handleApprove = async () => {
     setStatus('signing');
@@ -102,50 +130,126 @@ export function ApprovalModal({
           </div>
         </div>
 
+        {/* Tabs: Recommended | Alternate solutions */}
+        {alternatePlans.length > 0 && (
+          <div className="flex gap-1 mb-4 p-1 rounded-lg bg-zinc-900/60 border border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setActiveTab('recommended')}
+              className={`flex-1 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'recommended' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Recommended
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('alternates')}
+              className={`flex-1 py-2 rounded-md text-xs font-medium transition-colors ${activeTab === 'alternates' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              Alternate solutions ({alternatePlans.length})
+            </button>
+          </div>
+        )}
+
         <div className="space-y-4 text-sm">
 
-          {/* Recommendation */}
+          {/* Recommendation — only for primary plan when on recommended tab */}
+          {activeTab === 'recommended' && (
           <div>
             <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Recommendation</span>
             <p className="mt-0.5 font-semibold text-zinc-100 text-base">
               {plan.recommendation.replace(/_/g, ' ')}
             </p>
           </div>
+          )}
 
-          {/* Risk score — colored bar + label */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Risk Score</span>
-              <span className={`text-xs font-semibold ${risk.text}`}>{risk.label}</span>
+          {/* Risk score — colored bar + label (or alternate list) */}
+          {activeTab === 'alternates' ? (
+            <div className="space-y-3">
+              <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Other options we considered</span>
+              {alternatePlans.map((alt, i) => {
+                const altRisk = riskMeta(alt.riskScore);
+                return (
+                  <div key={alt.planId} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-medium text-zinc-200">{alt.recommendation.replace(/_/g, ' ')}</span>
+                      <span className={`text-xs font-semibold ${altRisk.text}`}>{alt.riskScore}/100</span>
+                    </div>
+                    {alt.actions.length > 0 && (
+                      <ul className="mt-1.5 space-y-1 text-xs text-zinc-400">
+                        {alt.actions.map((a, j) => (
+                          <li key={j}>→ {describeAction(a)}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {alt.actions.length === 0 && (
+                      <p className="text-xs text-zinc-500 mt-1">No actions — hold current allocation.</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${risk.bar}`}
-                  style={{ width: `${plan.riskScore}%` }}
-                />
+          ) : (
+          <>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Risk Score</span>
+                <span className={`text-xs font-semibold ${risk.text}`}>{risk.label}</span>
               </div>
-              <span className={`text-sm font-bold tabular-nums ${risk.text}`}>
-                {plan.riskScore}
-                <span className="text-zinc-600 font-normal">/100</span>
-              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${risk.bar}`}
+                    style={{ width: `${plan.riskScore}%` }}
+                  />
+                </div>
+                <span className={`text-sm font-bold tabular-nums ${risk.text}`}>
+                  {plan.riskScore}
+                  <span className="text-zinc-600 font-normal">/100</span>
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Plain English summary — replaces technical Reasoning + Worst Case when Gemini available */}
-          <div>
-            <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              {humanizing ? 'Explaining in plain English…' : 'In plain English'}
-            </span>
-            <p className="mt-0.5 text-zinc-300 leading-relaxed text-sm">
-              {humanizing && !humanSummary
-                ? 'Converting to easy-to-understand language…'
-                : (humanSummary ?? [plan.worstCaseAnalysis, plan.reasoning].filter(Boolean).join(' ').trim()) || '—'}
-            </p>
-          </div>
+            {/* Step-by-step explanation — LLM translates our logic for beginners */}
+            <div>
+              <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                {humanizing ? 'Explaining our logic…' : 'Why we recommend this'}
+              </span>
+              <div className="mt-0.5 text-zinc-300 leading-relaxed text-sm">
+                {humanizing && !humanReasoning ? (
+                  <p className="text-zinc-500">Turning our analysis into plain language for you…</p>
+                ) : humanReasoning ? (
+                  <div className="whitespace-pre-wrap">{humanReasoning}</div>
+                ) : (
+                  <p>{`We recommend ${plan.recommendation.replace(/_/g, ' ').toLowerCase()} based on your portfolio. Expand below to see the full logic.`}</p>
+                )}
+              </div>
+            </div>
+          </>
+          )}
 
-          {/* Actions — plain English */}
-          {plan.actions.length > 0 && (
+          {/* Expandable: full technical logic — only when on recommended tab */}
+          {activeTab === 'recommended' && (
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowDetails((d) => !d)}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-left text-xs font-medium text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+            >
+              <span>{showDetails ? 'Hide' : 'Show'} the detailed logic</span>
+              {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showDetails && (
+              <div className="px-3 pb-3 pt-0 border-t border-zinc-800">
+                <p className="text-xs text-zinc-500 font-mono leading-relaxed whitespace-pre-wrap">
+                  {[plan.worstCaseAnalysis, plan.reasoning].filter(Boolean).join('\n\n') || '—'}
+                </p>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* Actions — plain English (only when on recommended tab) */}
+          {activeTab === 'recommended' && plan.actions.length > 0 && (
             <div>
               <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Actions</span>
               <ul className="mt-1.5 space-y-1.5">
@@ -181,13 +285,15 @@ export function ApprovalModal({
         )}
 
         <div className="mt-5 flex gap-3">
-          <button
-            onClick={handleApprove}
-            disabled={disabled || status === 'signing'}
-            className="flex-1 py-3 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {status === 'signing' ? 'Signing...' : isWalletConnected ? 'Sign & Approve' : 'Approve (Demo)'}
-          </button>
+          {activeTab !== 'alternates' && (
+            <button
+              onClick={handleApprove}
+              disabled={disabled || status === 'signing'}
+              className="flex-1 py-3 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {status === 'signing' ? 'Signing...' : isWalletConnected ? 'Sign & Approve' : 'Approve (Demo)'}
+            </button>
+          )}
           <button
             onClick={onReject}
             disabled={disabled}

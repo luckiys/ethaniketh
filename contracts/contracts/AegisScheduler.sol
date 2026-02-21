@@ -39,7 +39,7 @@ contract AegisScheduler {
     /// planHash → approved flag
     mapping(bytes32 => bool) public approvedPlans;
 
-    /// planHash → Schedule entity address (set after scheduleRebalance)
+    /// planHash → Schedule entity address (set after scheduleRebalance or scheduleHbarRebalance)
     mapping(bytes32 => address) public scheduleAddresses;
 
     /// planHash → block timestamp when approved
@@ -58,6 +58,16 @@ contract AegisScheduler {
     );
 
     event ScheduleSigned(bytes32 indexed planHash, address scheduleAddress, address signer);
+
+    event HbarRebalanceScheduled(
+        bytes32 indexed planHash,
+        address receiver,
+        uint64 amount,
+        address scheduleAddress
+    );
+
+    // ─── Receive HBAR ─────────────────────────────────────────────────────────
+    receive() external payable {}
 
     // ─── Access control ───────────────────────────────────────────────────────
     modifier onlyOwner() {
@@ -128,6 +138,41 @@ contract AegisScheduler {
         emit RebalanceScheduled(
             planHash, token, sender, receiver, amount, scheduleAddress
         );
+    }
+
+    /**
+     * @notice Creates a scheduled HBAR (native) transfer via the Hedera
+     *         Schedule Service. Use when no HTS token is configured.
+     *         Contract must hold the amount (send HBAR to this contract first).
+     *
+     * @param planHash  Approved plan identifier
+     * @param receiver  Account receiving HBAR
+     * @param amount    Amount in tinybars (1 HBAR = 1e8 tinybars)
+     */
+    function scheduleHbarRebalance(
+        bytes32 planHash,
+        address receiver,
+        uint64 amount
+    ) external onlyOwner {
+        require(approvedPlans[planHash], "AegisScheduler: plan not approved");
+        require(
+            scheduleAddresses[planHash] == address(0),
+            "AegisScheduler: already scheduled"
+        );
+        require(amount > 0, "AegisScheduler: amount must be positive");
+        require(address(this).balance >= amount, "AegisScheduler: insufficient HBAR balance");
+
+        IHederaScheduleService schedSvc =
+            IHederaScheduleService(HEDERA_SCHEDULE_SERVICE);
+
+        (int64 responseCode, address scheduleAddress) =
+            schedSvc.scheduleNativeTransfer(receiver, amount);
+
+        require(responseCode == HEDERA_SUCCESS, "AegisScheduler: schedule creation failed");
+
+        scheduleAddresses[planHash] = scheduleAddress;
+
+        emit HbarRebalanceScheduled(planHash, receiver, amount, scheduleAddress);
     }
 
     // ─── Signing ─────────────────────────────────────────────────────────────

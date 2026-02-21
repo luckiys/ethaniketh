@@ -2,6 +2,9 @@
 
 **AI advises. Humans decide. Blockchain verifies.**
 
+> **Live demo:** [Add your Vercel URL here]  
+> **Demo video:** [Add link to 2–3 min walkthrough]
+
 A 3-agent operating system that monitors your DeFi portfolio in real time,
 proposes risk-adjusted strategies, and executes only after a signed human
 approval. Every recommendation and execution step is logged immutably to
@@ -52,19 +55,23 @@ Copy `frontend/.env.local.example` and fill in as needed.
 | `HEDERA_EVM_DEPLOYER_KEY` | **ECDSA** hex private key for EVM contract calls + Hardhat deploy |
 | `AEGIS_SCHEDULER_ADDRESS` | `AegisScheduler.sol` address after deploy (see Contract section) |
 
-### 0g Labs
+### 0g Labs (DeFAI bounty)
 
 | Variable | Description |
 |---|---|
 | `ZEROG_PRIVATE_KEY` | EVM private key for 0g testnet wallet. Fund at [faucet.0g.ai](https://faucet.0g.ai) |
 
-Without this key, agent brain uploads use a deterministic SHA-256 mock CID that is content-addressed and reproducible.
+Without this key, agent brain uploads use a deterministic SHA-256 mock CID. With it, strategy brains and executed plans are stored on 0G Storage for a decentralized audit trail.
 
 ### WalletConnect
 
 | Variable | Description |
 |---|---|
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Free project ID from [cloud.walletconnect.com](https://cloud.walletconnect.com). The built-in demo ID works on localhost. |
+| `NEXT_PUBLIC_ALCHEMY_API_KEY` | Free key at [alchemy.com](https://alchemy.com) — 300M CU/month, more reliable RPC. |
+| `VAR_SERVICE_URL` | Python GARCH/VaR service (optional). Default: `http://localhost:5001` |
+| `PORTFOLIO_SERVICE_URL` | Python PyPortfolioOpt service (optional). Default: `http://localhost:5002` |
+| `FRED_API_KEY` | Free key at [fred.stlouisfed.org](https://fred.stlouisfed.org) — VIX, macro regime. |
 
 ---
 
@@ -134,6 +141,29 @@ Located in `contracts/`.
 
 The Hedera Schedule Service bounty requires scheduling to be **initiated from a smart contract**, not only from a backend script. `AegisScheduler.sol` calls the Hedera Schedule Service system contract precompile (`0x000000000000000000000000000000000000022b`) to create on-chain scheduled token transfers. No backend cron job required after the transaction is submitted.
 
+### Optional Python services (Tier 2/3)
+
+For GARCH VaR and portfolio optimization:
+
+```bash
+# Install deps (use pip3 if pip not found)
+cd services/var && pip3 install -r requirements.txt
+cd services/portfolio && pip3 install -r requirements.txt
+
+# Start both services (from repo root)
+npm run dev:services
+```
+
+Or run individually:
+```bash
+cd services/var && uvicorn var_api:app --host 0.0.0.0 --port 5001
+cd services/portfolio && uvicorn portfolio_api:app --host 0.0.0.0 --port 5002
+```
+
+Set `VAR_SERVICE_URL` and `PORTFOLIO_SERVICE_URL` in `.env.local` if running on different hosts.
+
+---
+
 ### Deploy to Hedera Testnet
 
 ```bash
@@ -165,13 +195,14 @@ npx hardhat verify --network hederaTestnet <AEGIS_SCHEDULER_ADDRESS>
 
 ---
 
-## Bounty targets
+## ETHDenver 2026 Bounty targets
 
-| Bounty | Prize | Key implementation |
+| Bounty | Prize | AegisOS implementation |
 |---|---|---|
-| Killer App (OpenClaw/Hedera) | $10k | 3-agent autonomous pipeline, HCS audit trail, HTS execution |
-| Best Use of On-Chain Agent (iNFT / 0g Labs) | $3.5k | `zerog.ts` uploads to 0g, `hedera-nft.ts` mints HTS NFT with `0g://` metadata URI |
-| On-Chain Automation (Hedera Schedule Service) | $2-3k | `AegisScheduler.sol` calls Schedule Service precompile — contract-driven, not a backend script |
+| [Hedera Killer App (OpenClaw)](https://ethdenver2026.devfolio.co/prizes) | $10k | 3-agent pipeline, HCS audit trail, human-in-the-loop approval |
+| [Hedera Schedule Service](https://ethdenver2026.devfolio.co/prizes) | $5k | `AegisScheduler.sol` → Schedule Service precompile (`0x...022b`) |
+| [0g DeFAI](https://ethdenver2026.devfolio.co/prizes) | $7k | 0g Storage for agent brains, strategy archive, executed plan audit trail |
+| [0g iNFT](https://ethdenver2026.devfolio.co/prizes) | $7k | `zerog.ts` uploads to 0g, `hedera-nft.ts` mints HTS NFT with `0g://` metadata URI |
 
 ---
 
