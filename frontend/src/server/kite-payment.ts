@@ -97,7 +97,7 @@ export async function getAgentAddress(): Promise<string> {
 
   if (MOCK_MODE) {
     // Deterministic mock address for demo
-    g.__kite_agent_address = '0xAeg1sOSAgent000000000000000000000000000d';
+    g.__kite_agent_address = '0x000000000000000000000000000000000000dEaD';
     return g.__kite_agent_address;
   }
 
@@ -107,7 +107,7 @@ export async function getAgentAddress(): Promise<string> {
     g.__kite_agent_address = account.address;
     return account.address;
   } catch {
-    g.__kite_agent_address = '0xAeg1sOSAgent000000000000000000000000000d';
+    g.__kite_agent_address = '0x000000000000000000000000000000000000dEaD';
     return g.__kite_agent_address;
   }
 }
@@ -257,7 +257,18 @@ export async function payForService(
     return proof;
   } catch (e) {
     console.error('[kite] payment failed, using mock:', e);
-    return payForService(service, recipient); // fallback to mock
+    const mockTxHash = `0x${createHash('sha256').update(`${service}-${Date.now()}`).digest('hex')}`;
+    return {
+      txHash: mockTxHash,
+      from: await getAgentAddress(),
+      to: recipient,
+      value: SERVICE_PRICES[service].toString(),
+      chainId: KITE_CHAIN_ID,
+      service,
+      paidAt: new Date().toISOString(),
+      explorerUrl: `${KITE_EXPLORER}/tx/${mockTxHash}`,
+      mockMode: true,
+    };
   }
 }
 

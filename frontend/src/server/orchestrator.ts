@@ -170,8 +170,8 @@ export async function runWorkflow(sessionId: string): Promise<{
 
   // — Kite AI x402: Watcher agent pays for market data + sentiment before analyzing —
   const [watcherMarketPayment, watcherSentimentPayment] = await Promise.allSettled([
-    payForService('market-data', '0xAeg1sOSRecipient00000000000000000000market'),
-    payForService('watcher-signal', '0xAeg1sOSRecipient0000000000000000000watcher'),
+    payForService('market-data', '0x000000000000000000000000000000000000dEaD'),
+    payForService('watcher-signal', '0x000000000000000000000000000000000000dEaD'),
   ]);
   const kiteWatcherTxHash = watcherMarketPayment.status === 'fulfilled'
     ? watcherMarketPayment.value.txHash : 'mock';
@@ -193,7 +193,7 @@ export async function runWorkflow(sessionId: string): Promise<{
   sm.transition('PROPOSED');
 
   // — Kite AI x402: Strategist agent pays for AI reasoning before generating plan —
-  payForService('ai-reasoning', '0xAeg1sOSRecipient000000000000000000aistrat')
+  payForService('ai-reasoning', '0x000000000000000000000000000000000000dEaD')
     .then((proof) => emit(createEvent('PROPOSE', sessionId, 'strategist', {
       kitePayment: { service: 'ai-reasoning', txHash: proof.txHash },
     }, state.agentNftIds.strategist)))
