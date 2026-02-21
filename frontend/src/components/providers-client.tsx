@@ -29,6 +29,8 @@ function useSuppressWalletConnectNoise() {
         !Array.isArray(first) &&
         Object.keys(first).length === 0;
       if (isEmptyObject) return;
+      // Suppress known benign WalletConnect + React 18 hydration warning
+      if (typeof first === 'string' && first.includes('Cannot update a component') && first.includes('Hydrate')) return;
       original.apply(console, args);
     };
     return () => {

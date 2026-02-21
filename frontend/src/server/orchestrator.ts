@@ -14,7 +14,6 @@ import { runExecutor } from './agents/executor';
 import { updateAgentReputation, recordPrediction, settlePredictions } from './agent-economy';
 import { createSdkReceipt } from './sdk-audit';
 import { recordScheduleCreated } from './schedule-tracker';
-import { payForService } from './kite-payment';
 export type EventCallback = (event: AgentEvent) => void;
 
 let eventCallback: EventCallback | null = null;
@@ -168,17 +167,6 @@ export async function runWorkflow(sessionId: string): Promise<{
   const hcsTx1 = await logToHcs(createEvent('WATCH', sessionId, 'watcher', { status: 'running' }, state.agentNftIds.watcher));
   state.lastHcsTxId = hcsTx1;
 
-  // — Kite AI x402: Watcher agent pays for market data + sentiment before analyzing —
-  const [watcherMarketPayment, watcherSentimentPayment] = await Promise.allSettled([
-    payForService('market-data', '0x000000000000000000000000000000000000dEaD'),
-    payForService('watcher-signal', '0x000000000000000000000000000000000000dEaD'),
-  ]);
-  const kiteWatcherTxHash = watcherMarketPayment.status === 'fulfilled'
-    ? watcherMarketPayment.value.txHash : 'mock';
-  emit(createEvent('WATCH', sessionId, 'watcher', {
-    kitePayment: { service: 'market-data', txHash: kiteWatcherTxHash },
-  }, state.agentNftIds.watcher));
-
   let signal: WatchSignal;
   try {
     signal = await runWatcher(state.holdings, state.goal);
@@ -191,13 +179,6 @@ export async function runWorkflow(sessionId: string): Promise<{
   await logToHcs(createEvent('WATCH', sessionId, 'watcher', signal, state.agentNftIds.watcher));
 
   sm.transition('PROPOSED');
-
-  // — Kite AI x402: Strategist agent pays for AI reasoning before generating plan —
-  payForService('ai-reasoning', '0x000000000000000000000000000000000000dEaD')
-    .then((proof) => emit(createEvent('PROPOSE', sessionId, 'strategist', {
-      kitePayment: { service: 'ai-reasoning', txHash: proof.txHash },
-    }, state.agentNftIds.strategist)))
-    .catch(() => {});
 
   const { plan, alternatePlans } = await runStrategist(signal, state.goal, state.riskPreference);
   state.currentPlan = plan;
