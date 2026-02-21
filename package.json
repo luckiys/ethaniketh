@@ -9,7 +9,7 @@
     "build:shared": "npm run build --prefix shared 2>/dev/null || (cd shared && npm install && npm run build)",
     "build": "npm run build:shared && npm run build --prefix frontend",
     "start": "npm run start --prefix frontend",
-    "install:all": "cd shared && npm install && npm run build && cd ../frontend && npm install"
+    "install:all": "npm install && npm install --prefix shared && npm run build --prefix shared && npm install --prefix frontend && npm install --prefix backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
